@@ -11,14 +11,14 @@
       margin: 0;
       padding: 0;
       overflow: hidden;
-      background-color: #000;
+      background-color: transparent !important; /* Force transparent window frame */
       user-select: none;
       width: 100%;
       height: 100%;
     }
     
-    /* Pushes the live camera stream to the absolute back layer */
-    #video-background {
+    /* Target the hidden camera feed video element created natively by p5.js */
+    video {
       position: absolute;
       top: 50%;
       left: 50%;
@@ -27,18 +27,18 @@
       width: auto;
       height: auto;
       transform: translate(-50%, -50%);
-      z-index: -1;
       object-fit: cover;
+      z-index: 1 !important; /* Forces camera view layer to sit underneath */
     }
 
+    /* Pushes your interactive drawing canvas layer cleanly on top of the webcam feed */
     canvas {
       display: block;
       position: absolute;
       top: 0;
       left: 0;
-      z-index: 2;
-      /* Ensures the background of p5 doesn't block the video */
-      background: transparent; 
+      z-index: 2 !important; /* Locks drawing pixels safely to the top window layer */
+      background: transparent !important; /* Ensures no default canvas tints mask the background */
     }
 
     .copyright {
@@ -67,8 +67,6 @@
 </head>
 <body>
 
-  <video id="video-background" autoplay playsinline muted></video>
-
   <div class="copyright">© 2026 Qingcreativestudio. All rights reserved</div>
   <img src="watermark.png" alt="" class="watermark">
 
@@ -84,6 +82,9 @@ const THIRD_PI = Math.PI / 3;
 
 let organisms = [];
 let ambientOrbs = [];
+
+// Video Capture Variable
+let captureStream;
 
 // Audio variables
 let bgMusic;
@@ -108,9 +109,20 @@ function setup() {
   bgMusic.setVolume(0.4); 
   
   calculateButtonPositions();
-  initCamera(); // Boot up the rear phone camera stream
 
-  // Kept ambient orbs but made them highly transparent to tint the real world gently
+  // FIX: Capture video feed directly using native p5 elements
+  let constraints = {
+    video: {
+      facingMode: { ideal: "environment" } // Rear-facing on mobile, falls back to webcam on laptop
+    },
+    audio: false
+  };
+  
+  captureStream = createCapture(constraints);
+  captureStream.elt.setAttribute('playsinline', ''); // Prevents fullscreen media takeover on iOS Safari
+  captureStream.elt.setAttribute('muted', '');
+  
+  // Set up environmental ambient overlay markers
   for (let i = 0; i < 3; i++) {
     ambientOrbs.push({
       xPct: random(0.2, 0.8),
@@ -118,32 +130,6 @@ function setup() {
       sizeRatio: random(0.2, 0.4),
       phase: random(100)
     });
-  }
-}
-
-// Accesses the device's rear-facing camera specifically
-function initCamera() {
-  const video = document.getElementById('video-background');
-  
-  // Try targeting the rear camera first, but allow fallbacks if it doesn't exist
-  const constraints = {
-    video: {
-      facingMode: { ideal: 'environment' }, // "ideal" means use it if available, don't crash if not!
-      width: { ideal: 1280 },
-      height: { ideal: 720 }
-    },
-    audio: false
-  };
-
-  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-    navigator.mediaDevices.getUserMedia(constraints)
-      .then(function(stream) {
-        video.srcObject = stream;
-        video.play();
-      })
-      .catch(function(err) {
-        console.error("Camera system error: ", err);
-      });
   }
 }
 
@@ -155,11 +141,10 @@ function calculateButtonPositions() {
 }
 
 function draw() {
-  // CRITICAL: Replaced drawAtmosphericBackground gradient loop with clear()
-  // This wipes the canvas pixels every frame while maintaining full transparency
+  // Clear layout pixels to maintain canvas alpha transparency 
   clear(); 
   
-  // Render subtle lighting overlays on top of the video feed
+  // Render ambient coloring adjustments over the feed view
   drawAmbientOverlays();
 
   // Handle organisms
@@ -170,7 +155,7 @@ function draw() {
     if (org.isDead) organisms.splice(i, 1);
   }
 
-  // Auto-spawn meadow seeds from random screen percentage widths
+  // Auto-spawn meadow seeds from random screen widths
   if (frameCount % 90 === 0 && organisms.length < 45) {
     let autoSeed = new Organism(random(width), -10);
     autoSeed.isAutoSpawned = true;
@@ -233,6 +218,7 @@ function handleInteraction() {
   }
 }
 
+// --- REST OF THE ORIGINAL ORGANISM CLASS CODE UNTOUCHED ---
 function toggleAudio() {
   isMuted = !isMuted;
   if (isMuted) {
@@ -304,7 +290,6 @@ function windowResized() {
   calculateButtonPositions();
 }
 
-// Draws the atmospheric glowing orbs on top of the video feed seamlessly
 function drawAmbientOverlays() {
   push();
   let refDim = max(width, height);
@@ -315,7 +300,6 @@ function drawAmbientOverlays() {
     let currentY = height * orb.yPct;
     noStroke();
     for (let r = currentSize; r > 0; r -= 20) {
-      // Made alpha values slightly softer so the real-world camera feed shows through vividly
       let alpha = map(r, 0, currentSize, 8, 0); 
       fill(74, 144, 226, alpha);
       ellipse(currentX, currentY, r, r);
@@ -324,7 +308,6 @@ function drawAmbientOverlays() {
   pop();
 }
 
-// --- THE ORGANISM CLASS ---
 class Organism {
   constructor(x, y) {
     this.xPct = x / width;
@@ -410,7 +393,7 @@ class Organism {
       let currentPalette = this.palette || PALETTES[0];
       noFill();
       stroke(currentPalette.stem);
-      strokeWeight(1.5); // Bumped visibility up slightly for raw camera contrast
+      strokeWeight(1.6); 
       
       beginShape();
       let segments = 20;
