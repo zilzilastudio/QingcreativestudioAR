@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Bioluminescent Meadow AR</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.sound.min.js"></script>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background-color: #000;
+      user-select: none;
+      width: 100%;
+      height: 100%;
+    }
+    
+    /* Pushes the live camera stream to the absolute back layer */
+    #video-background {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      min-width: 100%;
+      min-height: 100%;
+      width: auto;
+      height: auto;
+      transform: translate(-50%, -50%);
+      z-index: -1;
+      object-fit: cover;
+    }
+
+    canvas {
+      display: block;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 2;
+      /* Ensures the background of p5 doesn't block the video */
+      background: transparent; 
+    }
+
+    .copyright {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      color: rgba(255, 255, 255, 0.8);
+      font-family: sans-serif;
+      font-size: 12px;
+      pointer-events: none; 
+      z-index: 10;
+    }
+
+    .watermark {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 2cm;
+      height: 2cm;
+      opacity: 0.15; 
+      pointer-events: none;
+      z-index: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <video id="video-background" autoplay playsinline muted></video>
+
+  <div class="copyright">© 2026 Qingcreativestudio. All rights reserved</div>
+  <img src="watermark.png" alt="" class="watermark">
+
+<script>
+// --- CONFIGURATION & PALETTE ---
+const PALETTES = [
+  { flower: '#fce38a', stem: '#95e1d3', glow: 'rgba(252, 227, 138, 0.2)' },
+  { flower: '#eaffd0', stem: '#a8df8e', glow: 'rgba(234, 255, 208, 0.2)' },
+  { flower: '#fff4bd', stem: '#f3e99f', glow: 'rgba(255, 244, 189, 0.2)' }
+];
+
+const THIRD_PI = Math.PI / 3; 
+
+let organisms = [];
+let ambientOrbs = [];
+
+// Audio variables
+let bgMusic;
+let interactionSound;
+let isMuted = false;
+
+// UI Layout Configuration
+let btnX, btnY;
+let resetBtnX, resetBtnY;
+let btnRadius = 25;
+
+function preload() {
+  soundFormats('mp3');
+  bgMusic = loadSound('Music.mp3');
+  interactionSound = loadSound('Kalimba.mp3');
+}
+
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  
+  bgMusic.setLoop(true);
+  bgMusic.setVolume(0.4); 
+  
+  calculateButtonPositions();
+  initCamera(); // Boot up the rear phone camera stream
+
+  // Kept ambient orbs but made them highly transparent to tint the real world gently
+  for (let i = 0; i < 3; i++) {
+    ambientOrbs.push({
+      xPct: random(0.2, 0.8),
+      yPct: random(0.1, 0.4),
+      sizeRatio: random(0.2, 0.4),
+      phase: random(100)
+    });
+  }
+}
+
+// Accesses the device's rear-facing camera specifically
+function initCamera() {
+  const video = document.getElementById('video-background');
+  
+  // Try targeting the rear camera first, but allow fallbacks if it doesn't exist
+  const constraints = {
+    video: {
+      facingMode: { ideal: 'environment' }, // "ideal" means use it if available, don't crash if not!
+      width: { ideal: 1280 },
+      height: { ideal: 720 }
+    },
+    audio: false
+  };
+
+  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    navigator.mediaDevices.getUserMedia(constraints)
+      .then(function(stream) {
+        video.srcObject = stream;
+        video.play();
+      })
+      .catch(function(err) {
+        console.error("Camera system error: ", err);
+      });
+  }
+}
+
+function calculateButtonPositions() {
+  btnX = width - 40;
+  btnY = height - 40;
+  resetBtnX = width - 105;
+  resetBtnY = height - 40;
+}
+
+function draw() {
+  // CRITICAL: Replaced drawAtmosphericBackground gradient loop with clear()
+  // This wipes the canvas pixels every frame while maintaining full transparency
+  clear(); 
+  
+  // Render subtle lighting overlays on top of the video feed
+  drawAmbientOverlays();
+
+  // Handle organisms
+  for (let i = organisms.length - 1; i >= 0; i--) {
+    let org = organisms[i];
+    org.update();
+    org.display();
+    if (org.isDead) organisms.splice(i, 1);
+  }
+
+  // Auto-spawn meadow seeds from random screen percentage widths
+  if (frameCount % 90 === 0 && organisms.length < 45) {
+    let autoSeed = new Organism(random(width), -10);
+    autoSeed.isAutoSpawned = true;
+    organisms.push(autoSeed);
+  }
+
+  // Center Instruction Text
+  noStroke();
+  fill(255, 255, 255, 140);
+  textAlign(CENTER, CENTER);
+  textSize(14);
+  text("Tap screen to plant seeds onto your space", width / 2, height - 30);
+
+  // Render buttons
+  drawAudioButton();
+  drawResetButton();
+}
+
+// --- INTERACTION LOGIC (MOBILE & DESKTOP) ---
+
+function mousePressed() {
+  handleInteraction();
+}
+
+function touchStarted() {
+  handleInteraction();
+  return false; 
+}
+
+function handleInteraction() {
+  if (getAudioContext().state !== 'running') {
+    getAudioContext().resume();
+  }
+
+  let dAudio = dist(mouseX, mouseY, btnX, btnY);
+  if (dAudio < btnRadius) {
+    toggleAudio();
+    return; 
+  }
+
+  let dReset = dist(mouseX, mouseY, resetBtnX, resetBtnY);
+  if (dReset < btnRadius) {
+    clearMeadow();
+    return; 
+  }
+  
+  if (!bgMusic.isPlaying() && !isMuted) {
+    bgMusic.play();
+  }
+
+  if (mouseY < height - 65) {
+    organisms.push(new Organism(mouseX, mouseY));
+    
+    if (!isMuted && interactionSound.isLoaded()) {
+      let randomPitch = random(0.9, 1.1);
+      interactionSound.rate(randomPitch);
+      interactionSound.setVolume(0.6);
+      interactionSound.play();
+    }
+  }
+}
+
+function toggleAudio() {
+  isMuted = !isMuted;
+  if (isMuted) {
+    if (bgMusic.isPlaying()) bgMusic.pause();
+  } else {
+    if (!bgMusic.isPlaying()) bgMusic.play();
+  }
+}
+
+function clearMeadow() {
+  organisms = [];
+}
+
+function drawAudioButton() {
+  push();
+  translate(btnX, btnY);
+  noStroke();
+  fill(149, 225, 211, isMuted ? 40 : 90);
+  ellipse(0, 0, btnRadius * 2, btnRadius * 2);
+
+  if (!isMuted) {
+    fill('#fce38a');
+    for (let a = 0; a < TWO_PI; a += HALF_PI) {
+      push();
+      rotate(a + QUARTER_PI);
+      ellipse(8, 0, 16, 12);
+      pop();
+    }
+    fill(255, 230);
+    ellipse(0, 0, 6, 6);
+  } else {
+    fill('rgba(0,0,0,0.5)');
+    stroke('#fce38a');
+    strokeWeight(2);
+    beginShape();
+    vertex(0, -10);
+    bezierVertex(8, -2, 6, 8, 0, 10);
+    bezierVertex(-6, 8, -8, -2, 0, -10);
+    endShape(CLOSE);
+    
+    stroke(255, 100, 100, 230);
+    strokeWeight(2.5);
+    line(-12, 12, 12, -12);
+  }
+  pop();
+}
+
+function drawResetButton() {
+  push();
+  translate(resetBtnX, resetBtnY);
+  noStroke();
+  fill(149, 225, 211, 80);
+  ellipse(0, 0, btnRadius * 2, btnRadius * 2);
+  
+  fill('#95e1d3'); 
+  for (let a = 0; a < TWO_PI; a += THIRD_PI) { 
+    push();
+    rotate(a);
+    ellipse(6, 0, 12, 6); 
+    pop();
+  }
+  fill('#fce38a'); 
+  ellipse(0, 0, 5, 5);
+  pop();
+}
+  
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  calculateButtonPositions();
+}
+
+// Draws the atmospheric glowing orbs on top of the video feed seamlessly
+function drawAmbientOverlays() {
+  push();
+  let refDim = max(width, height);
+  for (let orb of ambientOrbs) {
+    let pulse = map(sin(frameCount * 0.005 + orb.phase), -1, 1, 0.7, 1.2);
+    let currentSize = (refDim * orb.sizeRatio) * pulse;
+    let currentX = width * orb.xPct;
+    let currentY = height * orb.yPct;
+    noStroke();
+    for (let r = currentSize; r > 0; r -= 20) {
+      // Made alpha values slightly softer so the real-world camera feed shows through vividly
+      let alpha = map(r, 0, currentSize, 8, 0); 
+      fill(74, 144, 226, alpha);
+      ellipse(currentX, currentY, r, r);
+    }
+  }
+  pop();
+}
+
+// --- THE ORGANISM CLASS ---
+class Organism {
+  constructor(x, y) {
+    this.xPct = x / width;
+    this.yPct = y < 0 ? y : y / height;
+    this.isAutoSpawned = false;
+    this.floorOffsetPct = random(0.02, 0.05); 
+    
+    this.state = "SEED"; 
+    this.fallSpeedPct = random(0.002, 0.005); 
+    this.growSpeed = random(1.5, 3.0);
+    this.swayOffset = random(1000);
+    this.stemHeight = 0;
+    this.heightRatio = random(0.25, 0.65);
+    
+    this.flowerScale = 0;
+    this.maxFlowerScale = random(14, 24);
+    this.bloomSpeed = 0.03;
+    this.pulsePhase = random(100);
+    this.palette = random(PALETTES);
+  }
+
+  update() {
+    let t = frameCount * 0.01;
+    let wind = sin(t + this.swayOffset) * 0.0005;
+
+    let currentFloorOffset = height * this.floorOffsetPct;
+    let targetAnchorY = height - currentFloorOffset;
+
+    switch (this.state) {
+      case "SEED":
+        if (this.yPct < 0) {
+          this.yPct = ((-10) + (frameCount % 100)) / height; 
+        } else {
+          this.yPct += this.fallSpeedPct;
+        }
+        this.xPct += wind;
+        
+        let currentSeedPixelY = this.yPct * height;
+        if (currentSeedPixelY >= targetAnchorY || this.yPct >= (1.0 - this.floorOffsetPct)) {
+          this.state = "SPROUT";
+        }
+        break;
+        
+      case "SPROUT":
+        this.stemHeight += this.growSpeed;
+        let maxAllowedStemHeight = targetAnchorY * this.heightRatio;
+        if (this.stemHeight >= maxAllowedStemHeight) {
+          this.stemHeight = maxAllowedStemHeight;
+          this.state = "BLOOM";
+        }
+        break;
+        
+      case "BLOOM":
+        if (this.flowerScale < this.maxFlowerScale) {
+          this.flowerScale += (this.maxFlowerScale - this.flowerScale) * this.bloomSpeed + 0.02;
+        } else {
+          this.flowerScale = this.maxFlowerScale;
+        }
+        break;
+    }
+  }
+
+  display() {
+    push();
+    let currentAnchorX = this.xPct * width;
+    let currentFloorOffset = height * this.floorOffsetPct;
+    let currentAnchorY = height - currentFloorOffset;
+    
+    let maxAllowedStemHeight = currentAnchorY * this.heightRatio;
+    let globalSway = sin(frameCount * 0.008 + this.swayOffset) * 12 * (this.stemHeight / maxAllowedStemHeight);
+
+    if (this.state === "SEED") {
+      let seedPixelY = this.yPct * height;
+      if (seedPixelY < 0) seedPixelY = -10; 
+      
+      noStroke();
+      fill(this.palette?.flower || '#fce38a');
+      ellipse(currentAnchorX, seedPixelY, 6, 6);
+      fill(this.palette?.glow || 'rgba(252, 227, 138, 0.2)');
+      ellipse(currentAnchorX, seedPixelY, 16, 16);
+    } 
+    else {
+      let currentPalette = this.palette || PALETTES[0];
+      noFill();
+      stroke(currentPalette.stem);
+      strokeWeight(1.5); // Bumped visibility up slightly for raw camera contrast
+      
+      beginShape();
+      let segments = 20;
+      let currentTopX = currentAnchorX;
+      let currentTopY = currentAnchorY;
+
+      for (let i = 0; i <= segments; i++) {
+        let hRatio = i / segments;
+        let currentY = currentAnchorY - (this.stemHeight * hRatio);
+        let noiseFactor = noise(currentAnchorX * 0.01, currentY * 0.01 + frameCount * 0.002);
+        let swayX = map(noiseFactor, 0, 1, -15, 15) * hRatio + (globalSway * hRatio);
+        let currentX = currentAnchorX + swayX;
+        
+        vertex(currentX, currentY);
+        if (i === segments) {
+          currentTopX = currentX;
+          currentTopY = currentY;
+        }
+      }
+      endShape();
+
+      if (this.state === "BLOOM" && this.flowerScale > 0) {
+        let pulse = map(sin(frameCount * 0.02 + this.pulsePhase), -1, 1, 0.9, 1.1);
+        let size = this.flowerScale * pulse;
+
+        push();
+        translate(currentTopX, currentTopY);
+        noStroke();
+        fill(currentPalette.glow);
+        ellipse(0, 0, size * 3, size * 3);
+        ellipse(0, 0, size * 1.8, size * 1.8);
+
+        fill(currentPalette.flower);
+        for (let a = 0; a < TWO_PI; a += HALF_PI) {
+          push();
+          rotate(a + QUARTER_PI); 
+          ellipse(size * 0.35, 0, size * 0.7, size * 0.6);
+          pop();
+        }
+        fill(255, 255, 255, 240);
+        ellipse(0, 0, size * 0.25, size * 0.25);
+        pop();
+      }
+    }
+    pop();
+  }
+}
+</script>
+</body>
+</html>
