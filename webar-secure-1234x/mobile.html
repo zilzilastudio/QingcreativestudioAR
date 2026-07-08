@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Bioluminescent Meadow AR</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.sound.min.js"></script>
+  
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background-color: #0d1117; /* Dark backup background before camera loads */
+      user-select: none;
+      width: 100%;
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    
+    /* Native p5.js Webcam View Layer */
+    video {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      min-width: 100%;
+      min-height: 100%;
+      width: auto;
+      height: auto;
+      transform: translate(-50%, -50%);
+      object-fit: cover;
+      z-index: 1 !important; 
+    }
+
+    /* Interactive Drawing Canvas Layer */
+    canvas {
+      display: block;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 2 !important; 
+      background: transparent !important; 
+    }
+
+    /* PASSKEY GATEWAY SCREEN (Locks view until verified) */
+    #loginScreen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(13, 17, 23, 0.95);
+      backdrop-filter: blur(10px);
+      z-index: 9999 !important; /* Forces layout completely to the front */
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: #ffffff;
+      text-align: center;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+
+    .login-box {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 30px;
+      border-radius: 16px;
+      max-width: 360px;
+      width: 100%;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+
+    .login-box h2 {
+      margin: 0 0 10px 0;
+      font-size: 22px;
+      color: #95e1d3;
+    }
+
+    #boxSerialDisplay {
+      font-size: 14px;
+      color: #fce38a;
+      margin-bottom: 20px;
+      opacity: 0.9;
+    }
+
+    /* Password Input Container for positioning the Eye button */
+    .input-container {
+      position: relative;
+      width: 100%;
+      margin-bottom: 15px;
+    }
+
+    .login-box input {
+      width: 100%;
+      padding: 12px 45px 12px 12px; /* Right padding leaves space for the eye icon */
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(0, 0, 0, 0.2);
+      color: white;
+      border-radius: 8px;
+      font-size: 16px;
+      outline: none;
+      box-sizing: border-box;
+      text-align: center;
+    }
+
+    /* Toggle visibility button styles */
+    .toggle-password {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: rgba(255, 255, 255, 0.5);
+      cursor: pointer;
+      font-size: 14px;
+      padding: 4px;
+      user-select: none;
+    }
+    
+    .toggle-password:hover {
+      color: #95e1d3;
+    }
+
+    .login-box button.submit-btn {
+      width: 100%;
+      padding: 12px;
+      background: #95e1d3;
+      color: #121212;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.2s, opacity 0.2s;
+    }
+
+    .login-box button.submit-btn:hover {
+      background: #fce38a;
+    }
+
+    .login-box button.submit-btn:disabled {
+      opacity: 0.5;
+      background: #95e1d3;
+      cursor: not-allowed;
+    }
+
+    /* THE PRODUCT PAGE INTERACTIVE HUD */
+    #productPage {
+      display: none; /* Controlled dynamically by script */
+    }
+
+    .copyright {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 12px;
+      pointer-events: none; 
+      z-index: 10;
+    }
+
+    .watermark {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 2cm;
+      height: 2cm;
+      opacity: 0.15; 
+      pointer-events: none;
+      z-index: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="loginScreen">
+    <div class="login-box">
+      <h2>Meadow Authorization</h2>
+      <div id="boxSerialDisplay">Scanning Serial Code...</div>
+      
+      <div class="input-container">
+        <input type="password" id="passwordInput" placeholder="Enter Product Passkey" autocomplete="off">
+        <button type="button" class="toggle-password" onclick="togglePasswordVisibility()" title="Toggle Password Visibility">👁️</button>
+      </div>
+      
+      <button onclick="checkPassword()" class="submit-btn" id="submitBtn">Unlock Experience</button>
+    </div>
+  </div>
+
+  <div id="productPage">
+    <div class="copyright">© 2026 Qingcreativestudio. All rights reserved</div>
+    <img src="watermark.png" alt="" class="watermark">
+  </div>
+
+<script>
+// ==========================================
+// 1. SECURITY & CONNECTION CONFIGURATION
+// ==========================================
+const SUPABASE_URL = "https://ntxadfgtjgysqacmapdg.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_YBIKjGbtBeHWm756Rfl8jQ_ba6zqDjh";
+
+const urlParams = new URLSearchParams(window.location.search);
+const serialNumber = urlParams.get('serial');
+
+// Pre-auth state checker
+let isExperienceUnlocked = false;
+
+if (!serialNumber) {
+    window.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('boxSerialDisplay').innerText = "Error: Invalid QR Link (Missing Serial)";
+    });
+} else {
+    window.addEventListener('DOMContentLoaded', () => {
+        if (document.getElementById('boxSerialDisplay')) {
+            document.getElementById('boxSerialDisplay').innerText = "Serial Number: " + serialNumber;
+        }
+        
+        // Automatic bypass check if already logged in before
+        if (localStorage.getItem(`authorized_${serialNumber}`) === 'true') {
+            unlockExperienceUILayout();
+        }
+    });
+}
+
+function unlockExperienceUILayout() {
+    isExperienceUnlocked = true;
+    if(document.getElementById('loginScreen')) document.getElementById('loginScreen').style.display = 'none';
+    if(document.getElementById('productPage')) document.getElementById('productPage').style.display = 'block';
+}
+
+function togglePasswordVisibility() {
+    const passwordInput = document.getElementById('passwordInput');
+    const toggleBtn = document.querySelector('.toggle-password');
+    if (passwordInput.type === "password") {
+        passwordInput.type = "text";
+        toggleBtn.textContent = "🙈"; 
+    } else {
+        passwordInput.type = "password";
+        toggleBtn.textContent = "👁️"; 
+    }
+}
+
+// Generates a unique digital fingerprint based on user's hardware
+async function generateDeviceFingerprint() {
+  const traits = [
+    navigator.userAgent,
+    navigator.language,
+    screen.colorDepth,
+    `${screen.width}x${screen.height}`,
+    new Date().getTimezoneOffset(),
+    navigator.hardwareConcurrency || 'unknown'
+  ];
+  try {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.textBaseline = "top";
+      ctx.font = "14px 'Arial'";
+      ctx.fillStyle = "#f60";
+      ctx.fillRect(125,1,62,20);
+      ctx.fillStyle = "#069";
+      ctx.fillText("ZilzilaStudioGate", 2, 15);
+      traits.push(canvas.toDataURL());
+    }
+  } catch (e) {}
+
+  const traitString = traits.join('||');
+  const encoder = new TextEncoder();
+  const data = encoder.encode(traitString);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function checkPassword() {
+    if (!serialNumber) return alert("Missing a valid product serial identification code.");
+
+    // ==========================================
+    // MOBILE & TABLET ONLY HARDWARE ENFORCEMENT
+    // ==========================================
+    const isMobileOrTabletUA = /Mobi|Android|iPhone|iPod|iPad/i.test(navigator.userAgent);
+    // Modern iPads running iPadOS report as Macintosh hardware desktop line, but support touch interface targets
+    const isModerniPadTouch = (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    
+    if (!isMobileOrTabletUA && !isModerniPadTouch) {
+        return alert("Access Denied: This mobile AR experience is exclusive to smartphones and tablets. Laptops and Desktop PCs are not supported.");
+    }
+    // ==========================================
+
+    const userPassword = document.getElementById('passwordInput').value.trim();
+    if(!userPassword) return alert("Please input your package activation passkey.");
+
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.innerText = "Verifying...";
+    submitBtn.disabled = true;
+
+    try {
+        const safeSerial = encodeURIComponent(serialNumber);
+        const safePassword = encodeURIComponent(userPassword);
+        const targetUrl = `${SUPABASE_URL}/rest/v1/box_passwords?serial=eq.${safeSerial}&password=eq.${safePassword}&select=*`;
+        
+        const response = await fetch(targetUrl, {
+            method: 'GET',
+            headers: {
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) throw new Error(`HTTP Error Status: ${response.status}`);
+
+        const data = await response.json();
+
+        if (data && data.length > 0) {
+            const row = data[0];
+            const currentFingerprint = await generateDeviceFingerprint();
+
+            // Case 1: First time activation (Slot is empty)
+            if (!row.device_fingerprint) {
+                const updateUrl = `${SUPABASE_URL}/rest/v1/box_passwords?serial=eq.${safeSerial}`;
+                const updateResponse = await fetch(updateUrl, {
+                    method: 'PATCH',
+                    headers: {
+                        'apikey': SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=representation'
+                    },
+                    body: JSON.stringify({ device_fingerprint: currentFingerprint })
+                });
+
+                if (!updateResponse.ok) throw new Error("Failed to secure hardware lock profile mapping.");
+                
+                localStorage.setItem(`authorized_${serialNumber}`, 'true');
+                unlockExperienceUILayout();
+                if (getAudioContext().state !== 'running') getAudioContext().resume();
+
+            // Case 2: Returning user on the same hardware profile
+            } else if (row.device_fingerprint === currentFingerprint) {
+                localStorage.setItem(`authorized_${serialNumber}`, 'true');
+                unlockExperienceUILayout();
+                if (getAudioContext().state !== 'running') getAudioContext().resume();
+
+            // Case 3: Key shared or accessed on non-registered machine
+            } else {
+                alert("Access Denied: This license key identity card is already securely bound to another computer device.");
+            }
+        } else {
+            alert(`Incorrect passkey for Serial [${serialNumber}].\n\n1. Double-check that what you typed matches your packaging card.\n2. Ensure the Serial matches exactly.`);
+        }
+    } catch (error) {
+        alert("Authorization connection dropped or failed.\nReason: " + error.message + "\n\nPlease ensure Row Level Security (RLS) policies allow modifications.");
+    } finally {
+        submitBtn.innerText = "Unlock Experience";
+        submitBtn.disabled = false;
+    }
+}
+
+// ==========================================
+// 2. P5.JS BIOLUMINESCENT MEADOW CODE
+// ==========================================
+const PALETTES = [
+  { flower: '#fce38a', stem: '#95e1d3', glow: 'rgba(252, 227, 138, 0.2)' },
+  { flower: '#eaffd0', stem: '#a8df8e', glow: 'rgba(234, 255, 208, 0.2)' },
+  { flower: '#fff4bd', stem: '#f3e99f', glow: 'rgba(255, 244, 189, 0.2)' }
+];
+
+const THIRD_PI = Math.PI / 3; 
+
+let organisms = [];
+let ambientOrbs = [];
+let captureStream;
+let bgMusic;
+let interactionSound;
+let isMuted = false;
+
+let btnX, btnY;
+let resetBtnX, resetBtnY;
+let btnRadius = 25;
+
+function preload() {
+  soundFormats('mp3');
+  bgMusic = loadSound('Music.mp3');
+  interactionSound = loadSound('Kalimba.mp3');
+}
+
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  
+  bgMusic.setLoop(true);
+  bgMusic.setVolume(0.4); 
+  
+  calculateButtonPositions();
+
+  let constraints = {
+    video: { facingMode: { ideal: "environment" } },
+    audio: false
+  };
+  
+  captureStream = createCapture(constraints);
+  captureStream.elt.setAttribute('playsinline', ''); 
+  captureStream.elt.setAttribute('muted', '');
+  
+  for (let i = 0; i < 3; i++) {
+    ambientOrbs.push({
+      xPct: random(0.2, 0.8),
+      yPct: random(0.1, 0.4),
+      sizeRatio: random(0.2, 0.4),
+      phase: random(100)
+    });
+  }
+}
+
+function calculateButtonPositions() {
+  btnX = width - 40;
+  btnY = height - 40;
+  resetBtnX = width - 105;
+  resetBtnY = height - 40;
+}
+
+function draw() {
+  clear(); 
+  drawAmbientOverlays();
+
+  for (let i = organisms.length - 1; i >= 0; i--) {
+    let org = organisms[i];
+    org.update();
+    org.display();
+    if (org.isDead) organisms.splice(i, 1);
+  }
+
+  if (isExperienceUnlocked && frameCount % 90 === 0 && organisms.length < 45) {
+    let autoSeed = new Organism(random(width), -10);
+    autoSeed.isAutoSpawned = true;
+    organisms.push(autoSeed);
+  }
+
+  if (isExperienceUnlocked) {
+    noStroke();
+    fill(255, 255, 255, 140);
+    textAlign(CENTER, CENTER);
+    textSize(14);
+    text("Tap screen to plant seeds onto your space", width / 2, height - 30);
+
+    drawAudioButton();
+    drawResetButton();
+  }
+}
+
+function mousePressed() {
+  if (isExperienceUnlocked) handleInteraction();
+}
+
+function touchStarted() {
+  if (isExperienceUnlocked) {
+    handleInteraction();
+    return false; 
+  }
+}
+
+function handleInteraction() {
+  if (getAudioContext().state !== 'running') {
+    getAudioContext().resume();
+  }
+
+  let dAudio = dist(mouseX, mouseY, btnX, btnY);
+  if (dAudio < btnRadius) {
+    toggleAudio();
+    return; 
+  }
+
+  let dReset = dist(mouseX, mouseY, resetBtnX, resetBtnY);
+  if (dReset < btnRadius) {
+    clearMeadow();
+    return; 
+  }
+  
+  if (!bgMusic.isPlaying() && !isMuted) {
+    bgMusic.play();
+  }
+
+  if (mouseY < height - 65) {
+    organisms.push(new Organism(mouseX, mouseY));
+    
+    if (!isMuted && interactionSound.isLoaded()) {
+      let randomPitch = random(0.9, 1.1);
+      interactionSound.rate(randomPitch);
+      interactionSound.setVolume(0.6);
+      interactionSound.play();
+    }
+  }
+}
+
+// Audio/Reset rendering helper sequences
+function toggleAudio() {
+  isMuted = !isMuted;
+  if (isMuted) {
+    if (bgMusic.isPlaying()) bgMusic.pause();
+  } else {
+    if (!bgMusic.isPlaying()) bgMusic.play();
+  }
+}
+
+function clearMeadow() {
+  organisms = [];
+}
+
+function drawAudioButton() {
+  push();
+  translate(btnX, btnY);
+  noStroke();
+  fill(149, 225, 211, isMuted ? 40 : 90);
+  ellipse(0, 0, btnRadius * 2, btnRadius * 2);
+
+  if (!isMuted) {
+    fill('#fce38a');
+    for (let a = 0; a < TWO_PI; a += HALF_PI) {
+      push();
+      rotate(a + QUARTER_PI);
+      ellipse(8, 0, 16, 12);
+      pop();
+    }
+    fill(255, 230);
+    ellipse(0, 0, 6, 6);
+  } else {
+    fill('rgba(0,0,0,0.5)');
+    stroke('#fce38a');
+    weight(2);
+    beginShape();
+    vertex(0, -10);
+    bezierVertex(8, -2, 6, 8, 0, 10);
+    bezierVertex(-6, 8, -8, -2, 0, -10);
+    endShape(CLOSE);
+    
+    stroke(255, 100, 100, 230);
+    strokeWeight(2.5);
+    line(-12, 12, 12, -12);
+  }
+  pop();
+}
+
+function drawResetButton() {
+  push();
+  translate(resetBtnX, resetBtnY);
+  noStroke();
+  fill(149, 225, 211, 80);
+  ellipse(0, 0, btnRadius * 2, btnRadius * 2);
+  
+  fill('#95e1d3'); 
+  for (let a = 0; a < TWO_PI; a += THIRD_PI) { 
+    push();
+    rotate(a);
+    ellipse(6, 0, 12, 6); 
+    pop();
+  }
+  fill('#fce38a'); 
+  ellipse(0, 0, 5, 5);
+  pop();
+}
+  
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  calculateButtonPositions();
+}
+
+function drawAmbientOverlays() {
+  push();
+  let refDim = max(width, height);
+  for (let orb of ambientOrbs) {
+    let pulse = map(sin(frameCount * 0.005 + orb.phase), -1, 1, 0.7, 1.2);
+    let currentSize = (refDim * orb.sizeRatio) * pulse;
+    let currentX = width * orb.xPct;
+    let currentY = height * orb.yPct;
+    noStroke();
+    for (let r = currentSize; r > 0; r -= 20) {
+      let alpha = map(r, 0, currentSize, 8, 0); 
+      fill(74, 144, 226, alpha);
+      ellipse(currentX, currentY, r, r);
+    }
+  }
+  pop();
+}
+
+class Organism {
+  constructor(x, y) {
+    this.xPct = x / width;
+    this.yPct = y < 0 ? y : y / height;
+    this.isAutoSpawned = false;
+    this.floorOffsetPct = random(0.02, 0.05); 
+    
+    this.state = "SEED"; 
+    this.fallSpeedPct = random(0.002, 0.005); 
+    this.growSpeed = random(1.5, 3.0);
+    this.swayOffset = random(1000);
+    this.stemHeight = 0;
+    this.heightRatio = random(0.25, 0.65);
+    
+    this.flowerScale = 0;
+    this.maxFlowerScale = random(14, 24);
+    this.bloomSpeed = 0.03;
+    this.pulsePhase = random(100);
+    this.palette = random(PALETTES);
+  }
+
+  update() {
+    let t = frameCount * 0.01;
+    let wind = sin(t + this.swayOffset) * 0.0005;
+    let currentFloorOffset = height * this.floorOffsetPct;
+    let targetAnchorY = height - currentFloorOffset;
+
+    switch (this.state) {
+      case "SEED":
+        if (this.yPct < 0) {
+          this.yPct = ((-10) + (frameCount % 100)) / height; 
+        } else {
+          this.yPct += this.fallSpeedPct;
+        }
+        this.xPct += wind;
+        
+        let currentSeedPixelY = this.yPct * height;
+        if (currentSeedPixelY >= targetAnchorY || this.yPct >= (1.0 - this.floorOffsetPct)) {
+          this.state = "SPROUT";
+        }
+        break;
+        
+      case "SPROUT":
+        this.stemHeight += this.growSpeed;
+        let maxAllowedStemHeight = targetAnchorY * this.heightRatio;
+        if (this.stemHeight >= maxAllowedStemHeight) {
+          this.stemHeight = maxAllowedStemHeight;
+          this.state = "BLOOM";
+        }
+        break;
+        
+      case "BLOOM":
+        if (this.flowerScale < this.maxFlowerScale) {
+          this.flowerScale += (this.maxFlowerScale - this.flowerScale) * this.bloomSpeed + 0.02;
+        } else {
+          this.flowerScale = this.maxFlowerScale;
+        }
+        break;
+    }
+  }
+
+  display() {
+    push();
+    let currentAnchorX = this.xPct * width;
+    let currentFloorOffset = height * this.floorOffsetPct;
+    let currentAnchorY = height - currentFloorOffset;
+    
+    let maxAllowedStemHeight = currentAnchorY * this.heightRatio;
+    let globalSway = sin(frameCount * 0.008 + this.swayOffset) * 12 * (this.stemHeight / maxAllowedStemHeight);
+
+    if (this.state === "SEED") {
+      let seedPixelY = this.yPct * height;
+      if (seedPixelY < 0) seedPixelY = -10; 
+      
+      noStroke();
+      fill(this.palette?.flower || '#fce38a');
+      ellipse(currentAnchorX, seedPixelY, 6, 6);
+      fill(this.palette?.glow || 'rgba(252, 227, 138, 0.2)');
+      ellipse(currentAnchorX, seedPixelY, 16, 16);
+    } 
+    else {
+      let currentPalette = this.palette || PALETTES[0];
+      noFill();
+      stroke(currentPalette.stem);
+      strokeWeight(1.6); 
+      
+      beginShape();
+      let segments = 20;
+      let currentTopX = currentAnchorX;
+      let currentTopY = currentAnchorY;
+
+      for (let i = 0; i <= segments; i++) {
+        let hRatio = i / segments;
+        let currentY = currentAnchorY - (this.stemHeight * hRatio);
+        let noiseFactor = noise(currentAnchorX * 0.01, currentY * 0.01 + frameCount * 0.002);
+        let swayX = map(noiseFactor, 0, 1, -15, 15) * hRatio + (globalSway * hRatio);
+        let currentX = currentAnchorX + swayX;
+        
+        vertex(currentX, currentY);
+        if (i === segments) {
+          currentTopX = currentX;
+          currentTopY = currentY;
+        }
+      }
+      endShape();
+
+      if (this.state === "BLOOM" && this.flowerScale > 0) {
+        let pulse = map(sin(frameCount * 0.02 + this.pulsePhase), -1, 1, 0.9, 1.1);
+        let size = this.flowerScale * pulse;
+
+        push();
+        translate(currentTopX, currentTopY);
+        noStroke();
+        fill(currentPalette.glow);
+        ellipse(0, 0, size * 3, size * 3);
+        ellipse(0, 0, size * 1.8, size * 1.8);
+
+        fill(currentPalette.flower);
+        for (let a = 0; a < TWO_PI; a += HALF_PI) {
+          push();
+          rotate(a + QUARTER_PI); 
+          ellipse(size * 0.35, 0, size * 0.7, size * 0.6);
+          pop();
+        }
+        fill(255, 255, 255, 240);
+        ellipse(0, 0, size * 0.25, size * 0.25);
+        pop();
+      }
+    }
+    pop();
+  }
+}
+</script>
+</body>
+</html>
