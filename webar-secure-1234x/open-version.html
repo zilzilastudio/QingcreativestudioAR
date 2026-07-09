@@ -188,7 +188,7 @@
         <button type="button" class="toggle-password" onclick="togglePasswordVisibility()" title="Toggle Password Visibility">👁️</button>
       </div>
       
-      <button onclick="checkPassword()" class="submit-btn" id="submitBtn">Unlock Experience</button>
+      <button onclick="submitPasskeyVerification()" class="submit-btn" id="submitBtn">Unlock Experience</button>
     </div>
   </div>
 
@@ -199,7 +199,7 @@
 
 <script>
 // ==========================================
-// // 1. SECURITY & CONNECTION CONFIGURATION (SECURE CLOUDFLARE BACKEND)
+// 1. SECURITY & CONNECTION CONFIGURATION (SECURE CLOUDFLARE BACKEND)
 // ==========================================
 
 // Pre-auth state checker
@@ -231,8 +231,9 @@ function unlockExperienceUILayout() {
     isExperienceUnlocked = true;
     if(document.getElementById('loginScreen')) document.getElementById('loginScreen').style.display = 'none';
     if(document.getElementById('productPage')) document.getElementById('productPage').style.display = 'block';
-    
-    // Trigger your Three.js / Canvas AR Scene rendering here if needed!
+    if (typeof getAudioContext === 'function' && getAudioContext().state !== 'running') {
+        getAudioContext().resume();
+    }
 }
 
 function togglePasswordVisibility() {
@@ -252,17 +253,24 @@ async function submitPasskeyVerification() {
     const passwordInput = document.getElementById('passwordInput');
     if (!passwordInput || !serialNumber) return;
 
+    // ==========================================
+    // MOBILE & TABLET ONLY HARDWARE ENFORCEMENT
+    // ==========================================
+    const isMobileOrTabletUA = /Mobi|Android|iPhone|iPod|iPad/i.test(navigator.userAgent);
+    const isModerniPadTouch = (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    
+    if (!isMobileOrTabletUA && !isModerniPadTouch) {
+        return alert("Access Denied: This mobile AR experience is exclusive to smartphones and tablets. Laptops and Desktop PCs are not supported.");
+    }
+    // ==========================================
+
     const userPassword = passwordInput.value.trim();
     if (!userPassword) {
         alert("Please enter your product passkey.");
         return;
     }
 
-    // 1. Generate local device fingerprint
-    const deviceFingerprint = btoa(navigator.userAgent + (navigator.hardwareConcurrency || 4) + screen.width + "x" + screen.height);
-
-    const workerUrl = "https://meadow-auth-api.zilzilastudio7-7.workers.dev/";
-    const submitBtn = document.querySelector('.submit-btn'); // Change selector if your button has a different class
+    const submitBtn = document.getElementById('submitBtn');
 
     try {
         if (submitBtn) {
@@ -270,7 +278,11 @@ async function submitPasskeyVerification() {
             submitBtn.disabled = true;
         }
 
-        // 2. Transmit to secure Cloudflare gateway
+        // 1. Generate local device fingerprint hash profile string values 
+        const deviceFingerprint = btoa(navigator.userAgent + (navigator.hardwareConcurrency || 4) + screen.width + "x" + screen.height);
+        const workerUrl = "https://meadow-auth-api.zilzilastudio7-7.workers.dev/";
+
+        // 2. Transmit credentials cleanly to secure Cloudflare gateway link router
         const response = await fetch(workerUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -284,7 +296,7 @@ async function submitPasskeyVerification() {
         const result = await response.json();
 
         if (response.ok && result.allowed) {
-            // Save state to keep them logged in on this browser session
+            // Save local memory persistent status token flag array
             localStorage.setItem(`authorized_${serialNumber}`, 'true');
             unlockExperienceUILayout();
         } else {
@@ -301,6 +313,7 @@ async function submitPasskeyVerification() {
         }
     }
 }
+
 // ==========================================
 // 2. P5.JS BIOLUMINESCENT MEADOW CODE
 // ==========================================
@@ -404,7 +417,7 @@ function touchStarted() {
 }
 
 function handleInteraction() {
-  if (getAudioContext().state !== 'running') {
+  if (typeof getAudioContext === 'function' && getAudioContext().state !== 'running') {
     getAudioContext().resume();
   }
 
@@ -436,7 +449,6 @@ function handleInteraction() {
   }
 }
 
-// Audio/Reset rendering helper sequences
 function toggleAudio() {
   isMuted = !isMuted;
   if (isMuted) {
