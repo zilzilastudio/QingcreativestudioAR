@@ -199,20 +199,20 @@
 
 <script>
 // ==========================================
-// 1. SECURITY & CONNECTION CONFIGURATION
+// // 1. SECURITY & CONNECTION CONFIGURATION (SECURE CLOUDFLARE BACKEND)
 // ==========================================
-const SUPABASE_URL = "https://ntxadfgtjgysqacmapdg.supabase.co";
-const SUPABASE_ANON_KEY = "sb_publishable_YBIKjGbtBeHWm756Rfl8jQ_ba6zqDjh";
-
-const urlParams = new URLSearchParams(window.location.search);
-const serialNumber = urlParams.get('serial');
 
 // Pre-auth state checker
 let isExperienceUnlocked = false;
 
+// Auto-parse serial number from URL
+const urlParams = new URLSearchParams(window.location.search);
+const serialNumber = urlParams.get('serial');
+
 if (!serialNumber) {
     window.addEventListener('DOMContentLoaded', () => {
-        document.getElementById('boxSerialDisplay').innerText = "Error: Invalid QR Link (Missing Serial)";
+        const display = document.getElementById('boxSerialDisplay');
+        if (display) display.innerText = "Error: Invalid QR Link (Missing Serial)";
     });
 } else {
     window.addEventListener('DOMContentLoaded', () => {
@@ -220,7 +220,7 @@ if (!serialNumber) {
             document.getElementById('boxSerialDisplay').innerText = "Serial Number: " + serialNumber;
         }
         
-        // Automatic bypass check if already logged in before
+        // Automatic bypass check if already logged in before on this phone
         if (localStorage.getItem(`authorized_${serialNumber}`) === 'true') {
             unlockExperienceUILayout();
         }
@@ -231,124 +231,76 @@ function unlockExperienceUILayout() {
     isExperienceUnlocked = true;
     if(document.getElementById('loginScreen')) document.getElementById('loginScreen').style.display = 'none';
     if(document.getElementById('productPage')) document.getElementById('productPage').style.display = 'block';
+    
+    // Trigger your Three.js / Canvas AR Scene rendering here if needed!
 }
 
 function togglePasswordVisibility() {
     const passwordInput = document.getElementById('passwordInput');
     const toggleBtn = document.querySelector('.toggle-password');
-    if (passwordInput.type === "password") {
+    if (passwordInput && passwordInput.type === "password") {
         passwordInput.type = "text";
         toggleBtn.textContent = "🙈"; 
-    } else {
+    } else if (passwordInput) {
         passwordInput.type = "password";
         toggleBtn.textContent = "👁️"; 
     }
 }
 
-// Generates a unique digital fingerprint based on user's hardware
-async function generateDeviceFingerprint() {
-  const traits = [
-    navigator.userAgent,
-    navigator.language,
-    screen.colorDepth,
-    `${screen.width}x${screen.height}`,
-    new Date().getTimezoneOffset(),
-    navigator.hardwareConcurrency || 'unknown'
-  ];
-  try {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.textBaseline = "top";
-      ctx.font = "14px 'Arial'";
-      ctx.fillStyle = "#f60";
-      ctx.fillRect(125,1,62,20);
-      ctx.fillStyle = "#069";
-      ctx.fillText("ZilzilaStudioGate", 2, 15);
-      traits.push(canvas.toDataURL());
+// SECURE VERIFICATION HOOK (Zero Supabase Keys Exposed!)
+async function submitPasskeyVerification() {
+    const passwordInput = document.getElementById('passwordInput');
+    if (!passwordInput || !serialNumber) return;
+
+    const userPassword = passwordInput.value.trim();
+    if (!userPassword) {
+        alert("Please enter your product passkey.");
+        return;
     }
-  } catch (e) {}
 
-  const traitString = traits.join('||');
-  const encoder = new TextEncoder();
-  const data = encoder.encode(traitString);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
+    // 1. Generate local device fingerprint
+    const deviceFingerprint = btoa(navigator.userAgent + (navigator.hardwareConcurrency || 4) + screen.width + "x" + screen.height);
 
-async function checkPassword() {
-    if (!serialNumber) return alert("Missing a valid product serial identification code.");
-    const userPassword = document.getElementById('passwordInput').value.trim();
-    if(!userPassword) return alert("Please input your package activation passkey.");
-
-    const submitBtn = document.getElementById('submitBtn');
-    submitBtn.innerText = "Verifying...";
-    submitBtn.disabled = true;
+    const workerUrl = "https://meadow-auth-api.zilzilastudio7-7.workers.dev/";
+    const submitBtn = document.querySelector('.submit-btn'); // Change selector if your button has a different class
 
     try {
-        const safeSerial = encodeURIComponent(serialNumber);
-        const safePassword = encodeURIComponent(userPassword);
-        const targetUrl = `${SUPABASE_URL}/rest/v1/box_passwords?serial=eq.${safeSerial}&password=eq.${safePassword}&select=*`;
-        
-        const response = await fetch(targetUrl, {
-            method: 'GET',
-            headers: {
-                'apikey': SUPABASE_ANON_KEY,
-                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-                'Content-Type': 'application/json'
-            }
+        if (submitBtn) {
+            submitBtn.innerText = "Verifying...";
+            submitBtn.disabled = true;
+        }
+
+        // 2. Transmit to secure Cloudflare gateway
+        const response = await fetch(workerUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                serial: serialNumber,
+                password: userPassword,
+                fingerprint: deviceFingerprint
+            })
         });
 
-        if (!response.ok) throw new Error(`HTTP Error Status: ${response.status}`);
+        const result = await response.json();
 
-        const data = await response.json();
-
-        if (data && data.length > 0) {
-            const row = data[0];
-            const currentFingerprint = await generateDeviceFingerprint();
-
-            // Case 1: First time activation (Slot is empty)
-            if (!row.device_fingerprint) {
-                const updateUrl = `${SUPABASE_URL}/rest/v1/box_passwords?serial=eq.${safeSerial}`;
-                const updateResponse = await fetch(updateUrl, {
-                    method: 'PATCH',
-                    headers: {
-                        'apikey': SUPABASE_ANON_KEY,
-                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-                        'Content-Type': 'application/json',
-                        'Prefer': 'return=representation'
-                    },
-                    body: JSON.stringify({ device_fingerprint: currentFingerprint })
-                });
-
-                if (!updateResponse.ok) throw new Error("Failed to secure hardware lock profile mapping.");
-                
-                localStorage.setItem(`authorized_${serialNumber}`, 'true');
-                unlockExperienceUILayout();
-                if (getAudioContext().state !== 'running') getAudioContext().resume();
-
-            // Case 2: Returning user on the same hardware profile
-            } else if (row.device_fingerprint === currentFingerprint) {
-                localStorage.setItem(`authorized_${serialNumber}`, 'true');
-                unlockExperienceUILayout();
-                if (getAudioContext().state !== 'running') getAudioContext().resume();
-
-            // Case 3: Key shared or accessed on non-registered machine
-            } else {
-                alert("Access Denied: This license key identity card is already securely bound to another computer device.");
-            }
+        if (response.ok && result.allowed) {
+            // Save state to keep them logged in on this browser session
+            localStorage.setItem(`authorized_${serialNumber}`, 'true');
+            unlockExperienceUILayout();
         } else {
-            alert(`Incorrect passkey for Serial [${serialNumber}].\n\n1. Double-check that what you typed matches your packaging card.\n2. Ensure the Serial matches exactly.`);
+            alert(result.error || "Authentication failed. Invalid passkey assets.");
         }
+
     } catch (error) {
-        alert("Authorization connection dropped or failed.\nReason: " + error.message + "\n\nPlease ensure Row Level Security (RLS) policies allow modifications.");
+        console.error("Secure Authentication Link Failure:", error);
+        alert("Verification server connection timeout. Try again.");
     } finally {
-        submitBtn.innerText = "Unlock Experience";
-        submitBtn.disabled = false;
+        if (submitBtn) {
+            submitBtn.innerText = "Unlock Experience";
+            submitBtn.disabled = false;
+        }
     }
 }
-
 // ==========================================
 // 2. P5.JS BIOLUMINESCENT MEADOW CODE
 // ==========================================
