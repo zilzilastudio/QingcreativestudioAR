@@ -199,11 +199,10 @@
 
 <script>
 // ==========================================
-// 1. SECURITY & CONNECTION CONFIGURATION
+// 1. SECURITY & CONNECTION CONFIGURATION (SECURE EDGE INTERFACE)
 // ==========================================
-const SUPABASE_URL = "https://ntxadfgtjgysqacmapdg.supabase.co";
-const SUPABASE_ANON_KEY = "sb_publishable_YBIKjGbtBeHWm756Rfl8jQ_ba6zqDjh";
 
+// Parse parameters globally 
 const urlParams = new URLSearchParams(window.location.search);
 const serialNumber = urlParams.get('serial');
 
@@ -220,7 +219,7 @@ if (!serialNumber) {
             document.getElementById('boxSerialDisplay').innerText = "Serial Number: " + serialNumber;
         }
         
-        // Automatic bypass check if already logged in before
+        // Automatic bypass check if already logged in before on this device hardware profiling
         if (localStorage.getItem(`authorized_${serialNumber}`) === 'true') {
             unlockExperienceUILayout();
         }
@@ -231,6 +230,9 @@ function unlockExperienceUILayout() {
     isExperienceUnlocked = true;
     if(document.getElementById('loginScreen')) document.getElementById('loginScreen').style.display = 'none';
     if(document.getElementById('productPage')) document.getElementById('productPage').style.display = 'block';
+    if (typeof getAudioContext === 'function' && getAudioContext().state !== 'running') {
+        getAudioContext().resume();
+    }
 }
 
 function togglePasswordVisibility() {
@@ -284,7 +286,6 @@ async function checkPassword() {
     // MOBILE & TABLET ONLY HARDWARE ENFORCEMENT
     // ==========================================
     const isMobileOrTabletUA = /Mobi|Android|iPhone|iPod|iPad/i.test(navigator.userAgent);
-    // Modern iPads running iPadOS report as Macintosh hardware desktop line, but support touch interface targets
     const isModerniPadTouch = (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     
     if (!isMobileOrTabletUA && !isModerniPadTouch) {
@@ -300,62 +301,33 @@ async function checkPassword() {
     submitBtn.disabled = true;
 
     try {
-        const safeSerial = encodeURIComponent(serialNumber);
-        const safePassword = encodeURIComponent(userPassword);
-        const targetUrl = `${SUPABASE_URL}/rest/v1/box_passwords?serial=eq.${safeSerial}&password=eq.${safePassword}&select=*`;
+        const currentFingerprint = await generateDeviceFingerprint();
+        const workerUrl = "https://meadow-auth-api.zilzilastudio7-7.workers.dev/";
         
-        const response = await fetch(targetUrl, {
-            method: 'GET',
+        // Dispatch transmission array directly to Cloudflare secure middleman
+        const response = await fetch(workerUrl, {
+            method: 'POST',
             headers: {
-                'apikey': SUPABASE_ANON_KEY,
-                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
                 'Content-Type': 'application/json'
-            }
+            },
+            body: JSON.stringify({
+                serial: serialNumber,
+                password: userPassword,
+                fingerprint: currentFingerprint
+            })
         });
 
-        if (!response.ok) throw new Error(`HTTP Error Status: ${response.status}`);
+        const result = await response.json();
 
-        const data = await response.json();
-
-        if (data && data.length > 0) {
-            const row = data[0];
-            const currentFingerprint = await generateDeviceFingerprint();
-
-            // Case 1: First time activation (Slot is empty)
-            if (!row.device_fingerprint) {
-                const updateUrl = `${SUPABASE_URL}/rest/v1/box_passwords?serial=eq.${safeSerial}`;
-                const updateResponse = await fetch(updateUrl, {
-                    method: 'PATCH',
-                    headers: {
-                        'apikey': SUPABASE_ANON_KEY,
-                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-                        'Content-Type': 'application/json',
-                        'Prefer': 'return=representation'
-                    },
-                    body: JSON.stringify({ device_fingerprint: currentFingerprint })
-                });
-
-                if (!updateResponse.ok) throw new Error("Failed to secure hardware lock profile mapping.");
-                
-                localStorage.setItem(`authorized_${serialNumber}`, 'true');
-                unlockExperienceUILayout();
-                if (getAudioContext().state !== 'running') getAudioContext().resume();
-
-            // Case 2: Returning user on the same hardware profile
-            } else if (row.device_fingerprint === currentFingerprint) {
-                localStorage.setItem(`authorized_${serialNumber}`, 'true');
-                unlockExperienceUILayout();
-                if (getAudioContext().state !== 'running') getAudioContext().resume();
-
-            // Case 3: Key shared or accessed on non-registered machine
-            } else {
-                alert("Access Denied: This license key identity card is already securely bound to another computer device.");
-            }
+        if (response.ok && result.allowed) {
+            localStorage.setItem(`authorized_${serialNumber}`, 'true');
+            unlockExperienceUILayout();
         } else {
-            alert(`Incorrect passkey for Serial [${serialNumber}].\n\n1. Double-check that what you typed matches your packaging card.\n2. Ensure the Serial matches exactly.`);
+            // Display error generated natively from the isolated Cloudflare database engine
+            alert(result.error || "Authentication failed. Incorrect passkey assets.");
         }
     } catch (error) {
-        alert("Authorization connection dropped or failed.\nReason: " + error.message + "\n\nPlease ensure Row Level Security (RLS) policies allow modifications.");
+        alert("Authorization connection dropped or failed.\nReason: " + error.message);
     } finally {
         submitBtn.innerText = "Unlock Experience";
         submitBtn.disabled = false;
@@ -453,6 +425,7 @@ function draw() {
   }
 }
 
+// User interactions track
 function mousePressed() {
   if (isExperienceUnlocked) handleInteraction();
 }
@@ -465,7 +438,7 @@ function touchStarted() {
 }
 
 function handleInteraction() {
-  if (getAudioContext().state !== 'running') {
+  if (typeof getAudioContext === 'function' && getAudioContext().state !== 'running') {
     getAudioContext().resume();
   }
 
@@ -497,7 +470,6 @@ function handleInteraction() {
   }
 }
 
-// Audio/Reset rendering helper sequences
 function toggleAudio() {
   isMuted = !isMuted;
   if (isMuted) {
@@ -531,7 +503,7 @@ function drawAudioButton() {
   } else {
     fill('rgba(0,0,0,0.5)');
     stroke('#fce38a');
-    weight(2);
+    strokeWeight(2);
     beginShape();
     vertex(0, -10);
     bezierVertex(8, -2, 6, 8, 0, 10);
