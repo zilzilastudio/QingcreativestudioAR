@@ -302,7 +302,7 @@ async function checkPassword() {
 
     try {
         const currentFingerprint = await generateDeviceFingerprint();
-        const workerUrl = "https://qingtest.zilzilastudio.com";
+        const workerUrl = "https://qingtest.zilzilastudio.com/";
         
         // Dispatch transmission array directly to Cloudflare secure middleman
         const response = await fetch(workerUrl, {
