@@ -280,7 +280,7 @@ async function submitPasskeyVerification() {
 
         // 1. Generate local device fingerprint hash profile string values 
         const deviceFingerprint = btoa(navigator.userAgent + (navigator.hardwareConcurrency || 4) + screen.width + "x" + screen.height);
-        const workerUrl = "https://qingtest.zilzilastudio.com/";
+        const workerUrl = "https://auth.zilzilastudio.com/";
 
         // 2. Transmit credentials cleanly to secure Cloudflare gateway link router
         const response = await fetch(workerUrl, {
