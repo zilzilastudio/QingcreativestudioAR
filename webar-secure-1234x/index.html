@@ -313,7 +313,14 @@ async function checkPassword() {
             body: JSON.stringify({
                 serial: serialNumber,
                 password: userPassword,
-                fingerprint: currentFingerprint
+                fingerprint: currentFingerprint,
+                
+                // 🔒 ADD THIS: Prompt a simple email input or derive it from your system config
+                // For now, let's pass a prompt or an input field value if you add an email input box:
+                email: urlParams.get('email') || prompt("Please confirm your registered customer email:"), 
+                
+                // 🪐 OPTIONAL ADDITION: Explicitly declare the project type to guarantee safety 
+                product: "lily" // Change this to "orchid", "whale", etc., inside each separate repo!
             })
         });
 
