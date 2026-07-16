@@ -12,14 +12,13 @@
       margin: 0;
       padding: 0;
       overflow: hidden;
-      background-color: #0d1117; /* Dark backup background before camera loads */
+      background-color: #0d1117; 
       user-select: none;
       width: 100%;
       height: 100%;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
     
-    /* Native p5.js Webcam View Layer */
     video {
       position: absolute;
       top: 50%;
@@ -33,7 +32,6 @@
       z-index: 1 !important; 
     }
 
-    /* Interactive Drawing Canvas Layer */
     canvas {
       display: block;
       position: absolute;
@@ -43,7 +41,6 @@
       background: transparent !important; 
     }
 
-    /* PASSKEY GATEWAY SCREEN (Locks view until verified) */
     #loginScreen {
       position: fixed;
       top: 0;
@@ -52,7 +49,7 @@
       height: 100%;
       background: rgba(13, 17, 23, 0.95);
       backdrop-filter: blur(10px);
-      z-index: 9999 !important; /* Forces layout completely to the front */
+      z-index: 9999 !important; 
       display: flex;
       flex-direction: column;
       justify-content: center;
@@ -86,7 +83,6 @@
       opacity: 0.9;
     }
 
-    /* Password Input Container for positioning the Eye button */
     .input-container {
       position: relative;
       width: 100%;
@@ -95,7 +91,7 @@
 
     .login-box input {
       width: 100%;
-      padding: 12px 45px 12px 12px; /* Right padding leaves space for the eye icon */
+      padding: 12px 45px 12px 12px; 
       border: 1px solid rgba(255, 255, 255, 0.2);
       background: rgba(0, 0, 0, 0.2);
       color: white;
@@ -106,7 +102,6 @@
       text-align: center;
     }
 
-    /* Toggle visibility button styles */
     .toggle-password {
       position: absolute;
       right: 12px;
@@ -148,9 +143,8 @@
       cursor: not-allowed;
     }
 
-    /* THE PRODUCT PAGE INTERACTIVE HUD */
     #productPage {
-      display: none; /* Controlled dynamically by script */
+      display: none; 
     }
 
     .copyright {
@@ -205,6 +199,7 @@
 // Parse parameters globally 
 const urlParams = new URLSearchParams(window.location.search);
 const serialNumber = urlParams.get('serial');
+const emailParam = urlParams.get('email'); // 👈 Reads email cleanly straight out of your QR link!
 
 // Pre-auth state checker
 let isExperienceUnlocked = false;
@@ -314,13 +309,8 @@ async function checkPassword() {
                 serial: serialNumber,
                 password: userPassword,
                 fingerprint: currentFingerprint,
-                
-                // 🔒 ADD THIS: Prompt a simple email input or derive it from your system config
-                // For now, let's pass a prompt or an input field value if you add an email input box:
-                email: urlParams.get('email') || prompt("Please confirm your registered customer email:"), 
-                
-                // 🪐 OPTIONAL ADDITION: Explicitly declare the project type to guarantee safety 
-                product: "lily" // Change this to "orchid", "whale", etc., inside each separate repo!
+                email: emailParam,   // ✅ Automatically pulls parameter straight from QR link
+                product: "lily"       // 👈 The ONLY line you change in each product repo (e.g., "orchid", "whale")!
             })
         });
 
@@ -330,7 +320,6 @@ async function checkPassword() {
             localStorage.setItem(`authorized_${serialNumber}`, 'true');
             unlockExperienceUILayout();
         } else {
-            // Display error generated natively from the isolated Cloudflare database engine
             alert(result.error || "Authentication failed. Incorrect passkey assets.");
         }
     } catch (error) {
@@ -340,7 +329,6 @@ async function checkPassword() {
         submitBtn.disabled = false;
     }
 }
-
 // ==========================================
 // 2. P5.JS BIOLUMINESCENT MEADOW CODE
 // ==========================================
