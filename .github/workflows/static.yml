@@ -1,4 +1,4 @@
-# Simple workflow for deploying static content to GitHub Pages with HTML Obfuscation Armor
+# Simple workflow for deploying static content to GitHub Pages
 name: Deploy static content to Pages
 
 on:
@@ -16,6 +16,7 @@ permissions:
   id-token: write
 
 # Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
+# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
 concurrency:
   group: "pages"
   cancel-in-progress: false
@@ -31,28 +32,67 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # --- START OF OBFUSCATION SECURITY LAYER ---
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22 # 👈 Upgraded to Node 22 to clear the deprecation warning
+          node-version: 22
 
-      - name: Install HTML Obfuscator
-        run: npm install -g html-javascript-obfuscator
+      - name: Install JavaScript Obfuscator
+        run: npm install javascript-obfuscator
 
-      - name: Protect and Scramble Inline JavaScript inside HTML
+      - name: Protect and Scramble Inline JavaScript Code
         run: |
-          # Safely parses index.html, extracts the script blocks, scrambles them, and saves it back
-          html-javascript-obfuscator ./webar-secure-1234x/index.html --compact true --control-flow-flattening true --control-flow-flattening-threshold 1.0 --numbers-to-expressions true --string-array true --string-array-encoding 'rc4' --string-array-threshold 1.0 --domain-lock '.zilzilastudio.com' --domain-lock-redirect-url 'https://zilzilastudio.com'
+          node -e "
+          const fs = require('fs');
+          const JavaScriptObfuscator = require('javascript-obfuscator');
+          
+          const filePath = './webar-secure-1234x/index.html';
+          if (!fs.existsSync(filePath)) {
+            console.error('Error: Cannot find index.html at ' + filePath);
+            process.exit(1);
+          }
+          
+          let html = fs.readFileSync(filePath, 'utf8');
+          const scriptRegex = /(<script[^>]*>)([\s\S]*?)(<\/script>)/gi;
+          
+          let updatedHtml = html.replace(scriptRegex, (match, openTag, jsCode, closeTag) => {
+            if (!jsCode.trim() || openTag.includes('src=')) return match;
+            
+            try {
+              const obfuscated = JavaScriptObfuscator.obfuscate(jsCode, {
+                compact: true,
+                controlFlowFlattening: true,
+                controlFlowFlatteningThreshold: 1.0,
+                numbersToExpressions: true,
+                stringArray: true,
+                stringArrayEncoding: ['rc4'],
+                stringArrayThreshold: 1.0,
+                domainLock: ['.zilzilastudio.com'],
+                domainLockRedirectUrl: 'https://zilzilastudio.com'
+              }).getObfuscatedCode();
+              
+              return openTag + '\n' + obfuscated + '\n' + closeTag;
+            } catch (err) {
+              console.error('Obfuscation failed inside script block:', err);
+              return match;
+            }
+          });
+          
+          fs.writeFileSync(filePath, updatedHtml, 'utf8');
+          console.log('Success! HTML file successfully encrypted.');
+          "
+      # --- END OF OBFUSCATION SECURITY LAYER ---
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
-
+        
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Upload your specific application folder structure
+          # Upload entire repository
           path: './webar-secure-1234x'
-
+          
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
