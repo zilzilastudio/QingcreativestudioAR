@@ -1,4 +1,4 @@
-# Simple workflow for deploying static content to GitHub Pages
+# Simple workflow for deploying static content to GitHub Pages with Obfuscation Armor
 name: Deploy static content to Pages
 
 on:
@@ -11,12 +11,11 @@ on:
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
 # Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
-# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
 concurrency:
   group: "pages"
   cancel-in-progress: false
@@ -31,13 +30,29 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Obfuscator
+        run: npm install -g javascript-obfuscator
+
+      - name: Protect and Scramble Frontend Code
+        run: |
+          # Scrambles the index.html inside your specific app folder, secures strings, and locks it to your domain
+          javascript-obfuscator ./webar-secure-1234x/index.html --output ./webar-secure-1234x/index.html --compact true --control-flow-flattening true --control-flow-flattening-threshold 1.0 --numbers-to-expressions true --string-array true --string-array-encoding 'rc4' --string-array-threshold 1.0 --domain-lock '.zilzilastudio.com' --domain-lock-redirect-url 'https://zilzilastudio.com'
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Upload entire repository
+          # Upload your specific application folder structure
           path: './webar-secure-1234x'
+
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@v4
