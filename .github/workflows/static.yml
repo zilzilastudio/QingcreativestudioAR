@@ -1,4 +1,4 @@
-# Simple workflow for deploying static content to GitHub Pages with Obfuscation Armor
+# Simple workflow for deploying static content to GitHub Pages with HTML Obfuscation Armor
 name: Deploy static content to Pages
 
 on:
@@ -34,15 +34,15 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22 # 👈 Upgraded to Node 22 to clear the deprecation warning
 
-      - name: Install Obfuscator
-        run: npm install -g javascript-obfuscator
+      - name: Install HTML Obfuscator
+        run: npm install -g html-javascript-obfuscator
 
-      - name: Protect and Scramble Frontend Code
+      - name: Protect and Scramble Inline JavaScript inside HTML
         run: |
-          # Scrambles the index.html inside your specific app folder, secures strings, and locks it to your domain
-          javascript-obfuscator ./webar-secure-1234x/index.html --output ./webar-secure-1234x/index.html --compact true --control-flow-flattening true --control-flow-flattening-threshold 1.0 --numbers-to-expressions true --string-array true --string-array-encoding 'rc4' --string-array-threshold 1.0 --domain-lock '.zilzilastudio.com' --domain-lock-redirect-url 'https://zilzilastudio.com'
+          # Safely parses index.html, extracts the script blocks, scrambles them, and saves it back
+          html-javascript-obfuscator ./webar-secure-1234x/index.html --compact true --control-flow-flattening true --control-flow-flattening-threshold 1.0 --numbers-to-expressions true --string-array true --string-array-encoding 'rc4' --string-array-threshold 1.0 --domain-lock '.zilzilastudio.com' --domain-lock-redirect-url 'https://zilzilastudio.com'
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
