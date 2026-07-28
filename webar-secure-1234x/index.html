@@ -154,8 +154,16 @@
       cursor: not-allowed;
     }
 
+    /* --- FIXED Z-INDEX FOR WATERMARK & COPYRIGHT OVERLAY --- */
     #productPage {
       display: none; 
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10 !important; /* Stacked higher than canvas (z-index: 2) */
+      pointer-events: none;    /* Touch clicks pass through to p5 canvas */
     }
 
     .copyright {
@@ -175,9 +183,9 @@
       transform: translate(-50%, -50%);
       width: 2cm;
       height: 2cm;
-      opacity: 0.15; 
+      opacity: 0.25; 
       pointer-events: none;
-      z-index: 1;
+      z-index: 10;
     }
   </style>
 </head>
@@ -239,8 +247,14 @@ function unlockExperienceUILayout() {
     isExperienceUnlocked = true;
     if(document.getElementById('loginScreen')) document.getElementById('loginScreen').style.display = 'none';
     if(document.getElementById('productPage')) document.getElementById('productPage').style.display = 'block';
-    if (typeof getAudioContext === 'function' && getAudioContext().state !== 'running') {
-        getAudioContext().resume();
+    
+    // Auto-start music upon successful authorization
+    if (typeof userStartAudio === 'function') {
+        userStartAudio().then(() => {
+            if (bgMusic && bgMusic.isLoaded() && !bgMusic.isPlaying() && !isMuted) {
+                bgMusic.play();
+            }
+        }).catch(e => console.log("Audio unlock policy wait:", e));
     }
 }
 
@@ -365,8 +379,14 @@ let btnRadius = 25;
 
 function preload() {
   soundFormats('mp3');
-  bgMusic = loadSound('Music.mp3');
-  interactionSound = loadSound('Kalimba.mp3');
+  bgMusic = loadSound('Music.mp3', 
+    () => console.log('Music loaded successfully'), 
+    (err) => console.error('Music failed to load:', err)
+  );
+  interactionSound = loadSound('Kalimba.mp3', 
+    () => console.log('Kalimba loaded successfully'), 
+    (err) => console.error('Kalimba failed to load:', err)
+  );
 }
 
 function setup() {
@@ -444,8 +464,8 @@ function touchStarted() {
 }
 
 function handleInteraction() {
-  if (typeof getAudioContext === 'function' && getAudioContext().state !== 'running') {
-    getAudioContext().resume();
+  if (typeof userStartAudio === 'function') {
+    userStartAudio();
   }
 
   let dAudio = dist(mouseX, mouseY, btnX, btnY);
@@ -460,14 +480,14 @@ function handleInteraction() {
     return; 
   }
   
-  if (!bgMusic.isPlaying() && !isMuted) {
+  if (bgMusic && !bgMusic.isPlaying() && !isMuted) {
     bgMusic.play();
   }
 
   if (mouseY < height - 65) {
     organisms.push(new Organism(mouseX, mouseY));
     
-    if (!isMuted && interactionSound.isLoaded()) {
+    if (!isMuted && interactionSound && interactionSound.isLoaded()) {
       let randomPitch = random(0.9, 1.1);
       interactionSound.rate(randomPitch);
       interactionSound.setVolume(0.6);
@@ -479,9 +499,9 @@ function handleInteraction() {
 function toggleAudio() {
   isMuted = !isMuted;
   if (isMuted) {
-    if (bgMusic.isPlaying()) bgMusic.pause();
+    if (bgMusic && bgMusic.isPlaying()) bgMusic.pause();
   } else {
-    if (!bgMusic.isPlaying()) bgMusic.play();
+    if (bgMusic && !bgMusic.isPlaying()) bgMusic.play();
   }
 }
 
