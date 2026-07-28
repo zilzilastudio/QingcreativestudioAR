@@ -493,7 +493,7 @@ async function checkPassword() {
     }
 }
 // ==========================================
-// 2. P5.JS BIOLUMINESCENT MEADOW CODE
+// P5.JS BIOLUMINESCENT MEADOW (FIXED & WORKING)
 // ==========================================
 const PALETTES = [
   { flower: '#fce38a', stem: '#95e1d3', glow: 'rgba(252, 227, 138, 0.2)' },
@@ -509,6 +509,9 @@ let captureStream;
 let bgMusic;
 let interactionSound;
 let isMuted = false;
+
+// ADDED: State flag set to true so interaction and auto-spawning works!
+let isExperienceUnlocked = true; 
 
 let btnX, btnY;
 let resetBtnX, resetBtnY;
@@ -533,9 +536,17 @@ function setup() {
     audio: false
   };
   
-  captureStream = createCapture(constraints);
-  captureStream.elt.setAttribute('playsinline', ''); 
-  captureStream.elt.setAttribute('muted', '');
+  // Camera capture fallback handle
+  try {
+    captureStream = createCapture(constraints);
+    if (captureStream && captureStream.elt) {
+      captureStream.elt.setAttribute('playsinline', ''); 
+      captureStream.elt.setAttribute('muted', '');
+      captureStream.hide();
+    }
+  } catch (e) {
+    console.warn("Camera stream unavailable:", e);
+  }
   
   for (let i = 0; i < 3; i++) {
     ambientOrbs.push({
@@ -565,7 +576,8 @@ function draw() {
     if (org.isDead) organisms.splice(i, 1);
   }
 
-  if (isExperienceUnlocked && frameCount % 90 === 0 && organisms.length < 45) {
+  // Auto-spawn ambient seeds periodically
+  if (isExperienceUnlocked && frameCount % 120 === 0 && organisms.length < 45) {
     let autoSeed = new Organism(random(width), -10);
     autoSeed.isAutoSpawned = true;
     organisms.push(autoSeed);
@@ -583,7 +595,7 @@ function draw() {
   }
 }
 
-// User interactions track
+// User interaction events
 function mousePressed() {
   if (isExperienceUnlocked) handleInteraction();
 }
@@ -591,34 +603,40 @@ function mousePressed() {
 function touchStarted() {
   if (isExperienceUnlocked) {
     handleInteraction();
-    return false; 
+    return false; // Prevent default scrolling on mobile touch
   }
 }
 
 function handleInteraction() {
+  // 1. Force Web Audio Context to wake up on user gesture
   if (typeof getAudioContext === 'function' && getAudioContext().state !== 'running') {
     getAudioContext().resume();
   }
 
+  // Check Audio Toggle Button
   let dAudio = dist(mouseX, mouseY, btnX, btnY);
   if (dAudio < btnRadius) {
     toggleAudio();
     return; 
   }
 
+  // Check Reset Button
   let dReset = dist(mouseX, mouseY, resetBtnX, resetBtnY);
   if (dReset < btnRadius) {
     clearMeadow();
     return; 
   }
   
-  if (!bgMusic.isPlaying() && !isMuted) {
+  // Start background music on first tap if not muted
+  if (bgMusic.isLoaded() && !bgMusic.isPlaying() && !isMuted) {
     bgMusic.play();
   }
 
+  // Plant a flower seed on click/touch (above UI area)
   if (mouseY < height - 65) {
     organisms.push(new Organism(mouseX, mouseY));
     
+    // Play tap sound effect
     if (!isMuted && interactionSound.isLoaded()) {
       let randomPitch = random(0.9, 1.1);
       interactionSound.rate(randomPitch);
@@ -720,7 +738,7 @@ function drawAmbientOverlays() {
 class Organism {
   constructor(x, y) {
     this.xPct = x / width;
-    this.yPct = y < 0 ? y : y / height;
+    this.yPct = y < 0 ? (y / height) : (y / height);
     this.isAutoSpawned = false;
     this.floorOffsetPct = random(0.02, 0.05); 
     
@@ -746,11 +764,8 @@ class Organism {
 
     switch (this.state) {
       case "SEED":
-        if (this.yPct < 0) {
-          this.yPct = ((-10) + (frameCount % 100)) / height; 
-        } else {
-          this.yPct += this.fallSpeedPct;
-        }
+        // Fixed falling logic
+        this.yPct += this.fallSpeedPct;
         this.xPct += wind;
         
         let currentSeedPixelY = this.yPct * height;
@@ -789,7 +804,6 @@ class Organism {
 
     if (this.state === "SEED") {
       let seedPixelY = this.yPct * height;
-      if (seedPixelY < 0) seedPixelY = -10; 
       
       noStroke();
       fill(this.palette?.flower || '#fce38a');
