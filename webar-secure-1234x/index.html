@@ -216,153 +216,6 @@
 
 <script>
 // ==========================================
-// 1. SECURITY & CONNECTION CONFIGURATION
-// ==========================================
-
-const urlParams = new URLSearchParams(window.location.search);
-const serialNumber = urlParams.get('serial');
-const emailParam = urlParams.get('email');
-
-let isExperienceUnlocked = false;
-
-window.addEventListener('DOMContentLoaded', () => {
-    if (!serialNumber) {
-        if (document.getElementById('boxSerialDisplay')) {
-            document.getElementById('boxSerialDisplay').innerText = "Error: Invalid QR Link (Missing Serial)";
-        }
-    } else {
-        if (document.getElementById('boxSerialDisplay')) {
-            document.getElementById('boxSerialDisplay').innerText = "Serial Number: " + serialNumber;
-        }
-    }
-
-    // Attach immediate touch listener on unlock button to awaken Web Audio
-    const submitBtn = document.getElementById('submitBtn');
-    if (submitBtn) {
-        submitBtn.addEventListener('click', () => {
-            // Unlocks Audio Context immediately on raw touch gesture
-            if (typeof userStartAudio === 'function') {
-                userStartAudio();
-            }
-            checkPassword();
-        });
-    }
-
-    const lastSerial = localStorage.getItem('last_authorized_serial');
-    if (lastSerial && localStorage.getItem(`authorized_${lastSerial}`) === 'true') {
-        unlockExperienceUILayout();
-    }
-});
-
-function unlockExperienceUILayout() {
-    isExperienceUnlocked = true;
-    if(document.getElementById('loginScreen')) document.getElementById('loginScreen').style.display = 'none';
-    if(document.getElementById('productPage')) document.getElementById('productPage').style.display = 'block';
-    
-    // Play music once authorized
-    if (bgMusic && bgMusic.isLoaded() && !bgMusic.isPlaying() && !isMuted) {
-        bgMusic.play();
-    }
-}
-
-function togglePasswordVisibility() {
-    const passwordInput = document.getElementById('passwordInput');
-    const toggleBtn = document.querySelector('.toggle-password');
-    if (passwordInput.type === "password") {
-        passwordInput.type = "text";
-        toggleBtn.textContent = "🙈"; 
-    } else {
-        passwordInput.type = "password";
-        toggleBtn.textContent = "👁️"; 
-    }
-}
-
-async function generateDeviceFingerprint() {
-  const traits = [
-    navigator.userAgent,
-    navigator.language,
-    screen.colorDepth,
-    `${screen.width}x${screen.height}`,
-    new Date().getTimezoneOffset(),
-    navigator.hardwareConcurrency || 'unknown'
-  ];
-  try {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.textBaseline = "top";
-      ctx.font = "14px 'Arial'";
-      ctx.fillStyle = "#f60";
-      ctx.fillRect(125,1,62,20);
-      ctx.fillStyle = "#069";
-      ctx.fillText("ZilzilaStudioGate", 2, 15);
-      traits.push(canvas.toDataURL());
-    }
-  } catch (e) {}
-
-  const traitString = traits.join('||');
-  const encoder = new TextEncoder();
-  const data = encoder.encode(traitString);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-async function checkPassword() {
-    const isMobileOrTabletUA = /Mobi|Android|iPhone|iPod|iPad/i.test(navigator.userAgent);
-    const isModerniPadTouch = (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    
-    if (!isMobileOrTabletUA && !isModerniPadTouch) {
-        return alert("Access Denied: This mobile AR experience is exclusive to smartphones and tablets. Laptops and Desktop PCs are not supported.");
-    }
-
-    const userSerial = document.getElementById('serialInput').value.trim().toUpperCase();
-    const userPassword = document.getElementById('passwordInput').value.trim();
-
-    if(!userSerial) return alert("Please enter your Serial Number.");
-    if(!userPassword) return alert("Please input your package activation passkey.");
-
-    const submitBtn = document.getElementById('submitBtn');
-    submitBtn.innerText = "Verifying...";
-    submitBtn.disabled = true;
-
-    try {
-        const currentFingerprint = await generateDeviceFingerprint();
-        const workerUrl = "https://auth.zilzilastudio.com";
-
-        const response = await fetch(workerUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                serial: userSerial,
-                password: userPassword,
-                fingerprint: currentFingerprint,
-                email: emailParam || null,
-                product: "box"
-            })
-        });
-
-        const result = await response.json();
-
-        if (response.ok && result.allowed) {
-            localStorage.setItem(`authorized_${serialNumber}`, 'true');
-            localStorage.setItem('last_authorized_serial', userSerial);
-            localStorage.setItem(`authorized_${userSerial}`, 'true');
-            unlockExperienceUILayout();
-        } else {
-            alert(result.error || "Authentication failed. Invalid Serial Number or Passkey combination.");
-        }
-    } catch (error) {
-        alert("Authorization connection dropped or failed.\nReason: " + error.message);
-    } finally {
-        submitBtn.innerText = "Unlock Experience";
-        submitBtn.disabled = false;
-    }
-}
-
-// ==========================================
 // 2. P5.JS BIOLUMINESCENT MEADOW CODE
 // ==========================================
 const PALETTES = [
@@ -392,21 +245,21 @@ function preload() {
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
-  
+
   bgMusic.setLoop(true);
   bgMusic.setVolume(0.4); 
-  
+
   calculateButtonPositions();
 
   let constraints = {
     video: { facingMode: { ideal: "environment" } },
     audio: false
   };
-  
+
   captureStream = createCapture(constraints);
   captureStream.elt.setAttribute('playsinline', ''); 
   captureStream.elt.setAttribute('muted', '');
-  
+
   for (let i = 0; i < 3; i++) {
     ambientOrbs.push({
       xPct: random(0.2, 0.8),
@@ -453,6 +306,7 @@ function draw() {
   }
 }
 
+// User interactions track
 function mousePressed() {
   if (isExperienceUnlocked) handleInteraction();
 }
@@ -465,8 +319,8 @@ function touchStarted() {
 }
 
 function handleInteraction() {
-  if (typeof userStartAudio === 'function') {
-    userStartAudio();
+  if (typeof getAudioContext === 'function' && getAudioContext().state !== 'running') {
+    getAudioContext().resume();
   }
 
   let dAudio = dist(mouseX, mouseY, btnX, btnY);
@@ -480,15 +334,15 @@ function handleInteraction() {
     clearMeadow();
     return; 
   }
-  
-  if (bgMusic && !bgMusic.isPlaying() && !isMuted) {
+
+  if (!bgMusic.isPlaying() && !isMuted) {
     bgMusic.play();
   }
 
   if (mouseY < height - 65) {
     organisms.push(new Organism(mouseX, mouseY));
-    
-    if (!isMuted && interactionSound && interactionSound.isLoaded()) {
+
+    if (!isMuted && interactionSound.isLoaded()) {
       let randomPitch = random(0.9, 1.1);
       interactionSound.rate(randomPitch);
       interactionSound.setVolume(0.6);
@@ -500,9 +354,9 @@ function handleInteraction() {
 function toggleAudio() {
   isMuted = !isMuted;
   if (isMuted) {
-    if (bgMusic && bgMusic.isPlaying()) bgMusic.pause();
+    if (bgMusic.isPlaying()) bgMusic.pause();
   } else {
-    if (bgMusic && !bgMusic.isPlaying()) bgMusic.play();
+    if (!bgMusic.isPlaying()) bgMusic.play();
   }
 }
 
@@ -536,7 +390,7 @@ function drawAudioButton() {
     bezierVertex(8, -2, 6, 8, 0, 10);
     bezierVertex(-6, 8, -8, -2, 0, -10);
     endShape(CLOSE);
-    
+
     stroke(255, 100, 100, 230);
     strokeWeight(2.5);
     line(-12, 12, 12, -12);
@@ -550,7 +404,7 @@ function drawResetButton() {
   noStroke();
   fill(149, 225, 211, 80);
   ellipse(0, 0, btnRadius * 2, btnRadius * 2);
-  
+
   fill('#95e1d3'); 
   for (let a = 0; a < TWO_PI; a += THIRD_PI) { 
     push();
@@ -562,7 +416,7 @@ function drawResetButton() {
   ellipse(0, 0, 5, 5);
   pop();
 }
-  
+
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
   calculateButtonPositions();
@@ -592,14 +446,14 @@ class Organism {
     this.yPct = y < 0 ? y : y / height;
     this.isAutoSpawned = false;
     this.floorOffsetPct = random(0.02, 0.05); 
-    
+
     this.state = "SEED"; 
     this.fallSpeedPct = random(0.002, 0.005); 
     this.growSpeed = random(1.5, 3.0);
     this.swayOffset = random(1000);
     this.stemHeight = 0;
     this.heightRatio = random(0.25, 0.65);
-    
+
     this.flowerScale = 0;
     this.maxFlowerScale = random(14, 24);
     this.bloomSpeed = 0.03;
@@ -621,13 +475,13 @@ class Organism {
           this.yPct += this.fallSpeedPct;
         }
         this.xPct += wind;
-        
+
         let currentSeedPixelY = this.yPct * height;
         if (currentSeedPixelY >= targetAnchorY || this.yPct >= (1.0 - this.floorOffsetPct)) {
           this.state = "SPROUT";
         }
         break;
-        
+
       case "SPROUT":
         this.stemHeight += this.growSpeed;
         let maxAllowedStemHeight = targetAnchorY * this.heightRatio;
@@ -636,7 +490,7 @@ class Organism {
           this.state = "BLOOM";
         }
         break;
-        
+
       case "BLOOM":
         if (this.flowerScale < this.maxFlowerScale) {
           this.flowerScale += (this.maxFlowerScale - this.flowerScale) * this.bloomSpeed + 0.02;
@@ -652,14 +506,14 @@ class Organism {
     let currentAnchorX = this.xPct * width;
     let currentFloorOffset = height * this.floorOffsetPct;
     let currentAnchorY = height - currentFloorOffset;
-    
+
     let maxAllowedStemHeight = currentAnchorY * this.heightRatio;
     let globalSway = sin(frameCount * 0.008 + this.swayOffset) * 12 * (this.stemHeight / maxAllowedStemHeight);
 
     if (this.state === "SEED") {
       let seedPixelY = this.yPct * height;
       if (seedPixelY < 0) seedPixelY = -10; 
-      
+
       noStroke();
       fill(this.palette?.flower || '#fce38a');
       ellipse(currentAnchorX, seedPixelY, 6, 6);
@@ -671,7 +525,7 @@ class Organism {
       noFill();
       stroke(currentPalette.stem);
       strokeWeight(1.6); 
-      
+
       beginShape();
       let segments = 20;
       let currentTopX = currentAnchorX;
@@ -683,7 +537,7 @@ class Organism {
         let noiseFactor = noise(currentAnchorX * 0.01, currentY * 0.01 + frameCount * 0.002);
         let swayX = map(noiseFactor, 0, 1, -15, 15) * hRatio + (globalSway * hRatio);
         let currentX = currentAnchorX + swayX;
-        
+
         vertex(currentX, currentY);
         if (i === segments) {
           currentTopX = currentX;
