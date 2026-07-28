@@ -154,7 +154,6 @@
       cursor: not-allowed;
     }
 
-    /* --- FIXED Z-INDEX FOR WATERMARK & COPYRIGHT OVERLAY --- */
     #productPage {
       display: none; 
       position: absolute;
@@ -162,8 +161,8 @@
       left: 0;
       width: 100%;
       height: 100%;
-      z-index: 10 !important; /* Stacked higher than canvas (z-index: 2) */
-      pointer-events: none;    /* Touch clicks pass through to p5 canvas */
+      z-index: 10 !important; 
+      pointer-events: none; /* Let touches fall through to p5 canvas */
     }
 
     .copyright {
@@ -206,7 +205,7 @@
         <button type="button" class="toggle-password" onclick="togglePasswordVisibility()" title="Toggle Password Visibility">👁️</button>
       </div>
 
-      <button onclick="checkPassword()" class="submit-btn" id="submitBtn">Unlock Experience</button>
+      <button id="submitBtn" class="submit-btn">Unlock Experience</button>
     </div>
   </div>
 
@@ -237,6 +236,18 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Attach immediate touch listener on unlock button to awaken Web Audio
+    const submitBtn = document.getElementById('submitBtn');
+    if (submitBtn) {
+        submitBtn.addEventListener('click', () => {
+            // Unlocks Audio Context immediately on raw touch gesture
+            if (typeof userStartAudio === 'function') {
+                userStartAudio();
+            }
+            checkPassword();
+        });
+    }
+
     const lastSerial = localStorage.getItem('last_authorized_serial');
     if (lastSerial && localStorage.getItem(`authorized_${lastSerial}`) === 'true') {
         unlockExperienceUILayout();
@@ -248,13 +259,9 @@ function unlockExperienceUILayout() {
     if(document.getElementById('loginScreen')) document.getElementById('loginScreen').style.display = 'none';
     if(document.getElementById('productPage')) document.getElementById('productPage').style.display = 'block';
     
-    // Auto-start music upon successful authorization
-    if (typeof userStartAudio === 'function') {
-        userStartAudio().then(() => {
-            if (bgMusic && bgMusic.isLoaded() && !bgMusic.isPlaying() && !isMuted) {
-                bgMusic.play();
-            }
-        }).catch(e => console.log("Audio unlock policy wait:", e));
+    // Play music once authorized
+    if (bgMusic && bgMusic.isLoaded() && !bgMusic.isPlaying() && !isMuted) {
+        bgMusic.play();
     }
 }
 
@@ -379,14 +386,8 @@ let btnRadius = 25;
 
 function preload() {
   soundFormats('mp3');
-  bgMusic = loadSound('Music.mp3', 
-    () => console.log('Music loaded successfully'), 
-    (err) => console.error('Music failed to load:', err)
-  );
-  interactionSound = loadSound('Kalimba.mp3', 
-    () => console.log('Kalimba loaded successfully'), 
-    (err) => console.error('Kalimba failed to load:', err)
-  );
+  bgMusic = loadSound('Music.mp3');
+  interactionSound = loadSound('Kalimba.mp3');
 }
 
 function setup() {
