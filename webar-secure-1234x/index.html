@@ -6,7 +6,7 @@
   <title>Bioluminescent Meadow AR</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.sound.min.js"></script>
-
+  
   <style>
     body, html {
       margin: 0;
@@ -18,7 +18,7 @@
       height: 100%;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
-
+    
     video {
       position: absolute;
       top: 50%;
@@ -83,13 +83,6 @@
       opacity: 0.9;
     }
 
-    .login-subtitle {
-      font-size: 13px;
-      color: #fce38a;
-      margin-bottom: 20px;
-      opacity: 0.9;
-    }
-
     .input-container {
       position: relative;
       width: 100%;
@@ -98,7 +91,7 @@
 
     .login-box input {
       width: 100%;
-      padding: 12px; 
+      padding: 12px 45px 12px 12px; 
       border: 1px solid rgba(255, 255, 255, 0.2);
       background: rgba(0, 0, 0, 0.2);
       color: white;
@@ -107,10 +100,6 @@
       outline: none;
       box-sizing: border-box;
       text-align: center;
-    }
-
-    .login-box input.passkey-input {
-      padding-right: 45px;
     }
 
     .toggle-password {
@@ -126,7 +115,7 @@
       padding: 4px;
       user-select: none;
     }
-
+    
     .toggle-password:hover {
       color: #95e1d3;
     }
@@ -156,13 +145,6 @@
 
     #productPage {
       display: none; 
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 10 !important; 
-      pointer-events: none; /* Let touches fall through to p5 canvas */
     }
 
     .copyright {
@@ -182,9 +164,9 @@
       transform: translate(-50%, -50%);
       width: 2cm;
       height: 2cm;
-      opacity: 0.25; 
+      opacity: 0.15; 
       pointer-events: none;
-      z-index: 10;
+      z-index: 1;
     }
   </style>
 </head>
@@ -194,18 +176,13 @@
     <div class="login-box">
       <h2>Meadow Authorization</h2>
       <div id="boxSerialDisplay">Scanning Serial Code...</div>
-      <div class="login-subtitle">Please enter your serial number and passkey</div>
-
+      
       <div class="input-container">
-        <input type="text" id="serialInput" placeholder="Serial Code (e.g. A739)" autocomplete="off" style="text-transform: uppercase;">
-      </div>
-
-      <div class="input-container">
-        <input type="password" id="passwordInput" class="passkey-input" placeholder="Product Passkey" autocomplete="off">
+        <input type="password" id="passwordInput" placeholder="Enter Product Passkey" autocomplete="off">
         <button type="button" class="toggle-password" onclick="togglePasswordVisibility()" title="Toggle Password Visibility">👁️</button>
       </div>
-
-      <button id="submitBtn" class="submit-btn">Unlock Experience</button>
+      
+      <button onclick="checkPassword()" class="submit-btn" id="submitBtn">Unlock Experience</button>
     </div>
   </div>
 
@@ -215,6 +192,143 @@
   </div>
 
 <script>
+// ==========================================
+// 1. SECURITY & CONNECTION CONFIGURATION (SECURE EDGE INTERFACE)
+// ==========================================
+
+// Parse parameters globally 
+const urlParams = new URLSearchParams(window.location.search);
+const serialNumber = urlParams.get('serial');
+const emailParam = urlParams.get('email'); // 👈 Reads email cleanly straight out of your QR link!
+
+// Pre-auth state checker
+let isExperienceUnlocked = false;
+
+if (!serialNumber) {
+    window.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('boxSerialDisplay').innerText = "Error: Invalid QR Link (Missing Serial)";
+    });
+} else {
+    window.addEventListener('DOMContentLoaded', () => {
+        if (document.getElementById('boxSerialDisplay')) {
+            document.getElementById('boxSerialDisplay').innerText = "Serial Number: " + serialNumber;
+        }
+        
+        // Automatic bypass check if already logged in before on this device hardware profiling
+        if (localStorage.getItem(`authorized_${serialNumber}`) === 'true') {
+            unlockExperienceUILayout();
+        }
+    });
+}
+
+function unlockExperienceUILayout() {
+    isExperienceUnlocked = true;
+    if(document.getElementById('loginScreen')) document.getElementById('loginScreen').style.display = 'none';
+    if(document.getElementById('productPage')) document.getElementById('productPage').style.display = 'block';
+    if (typeof getAudioContext === 'function' && getAudioContext().state !== 'running') {
+        getAudioContext().resume();
+    }
+}
+
+function togglePasswordVisibility() {
+    const passwordInput = document.getElementById('passwordInput');
+    const toggleBtn = document.querySelector('.toggle-password');
+    if (passwordInput.type === "password") {
+        passwordInput.type = "text";
+        toggleBtn.textContent = "🙈"; 
+    } else {
+        passwordInput.type = "password";
+        toggleBtn.textContent = "👁️"; 
+    }
+}
+
+// Generates a unique digital fingerprint based on user's hardware
+async function generateDeviceFingerprint() {
+  const traits = [
+    navigator.userAgent,
+    navigator.language,
+    screen.colorDepth,
+    `${screen.width}x${screen.height}`,
+    new Date().getTimezoneOffset(),
+    navigator.hardwareConcurrency || 'unknown'
+  ];
+  try {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.textBaseline = "top";
+      ctx.font = "14px 'Arial'";
+      ctx.fillStyle = "#f60";
+      ctx.fillRect(125,1,62,20);
+      ctx.fillStyle = "#069";
+      ctx.fillText("ZilzilaStudioGate", 2, 15);
+      traits.push(canvas.toDataURL());
+    }
+  } catch (e) {}
+
+  const traitString = traits.join('||');
+  const encoder = new TextEncoder();
+  const data = encoder.encode(traitString);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function checkPassword() {
+    if (!serialNumber) return alert("Missing a valid product serial identification code.");
+
+    // ==========================================
+    // MOBILE & TABLET ONLY HARDWARE ENFORCEMENT
+    // ==========================================
+    const isMobileOrTabletUA = /Mobi|Android|iPhone|iPod|iPad/i.test(navigator.userAgent);
+    const isModerniPadTouch = (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    
+    if (!isMobileOrTabletUA && !isModerniPadTouch) {
+        return alert("Access Denied: This mobile AR experience is exclusive to smartphones and tablets. Laptops and Desktop PCs are not supported.");
+    }
+    // ==========================================
+
+    const userPassword = document.getElementById('passwordInput').value.trim();
+    if(!userPassword) return alert("Please input your package activation passkey.");
+
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.innerText = "Verifying...";
+    submitBtn.disabled = true;
+
+    try {
+        const currentFingerprint = await generateDeviceFingerprint();
+        const workerUrl = "https://auth.zilzilastudio.com";
+        
+        // Dispatch transmission array directly to Cloudflare secure middleman
+        const response = await fetch(workerUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                serial: serialNumber,
+                password: userPassword,
+                fingerprint: currentFingerprint,
+                email: emailParam,   // ✅ Automatically pulls parameter straight from QR link
+                product: "box"       // 👈 The ONLY line you change in each product repo (e.g., "orchid", "whale")!
+            })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.allowed) {
+            localStorage.setItem(`authorized_${serialNumber}`, 'true');
+            unlockExperienceUILayout();
+        } else {
+            alert(result.error || "Authentication failed. Incorrect passkey assets.");
+        }
+    } catch (error) {
+        alert("Authorization connection dropped or failed.\nReason: " + error.message);
+    } finally {
+        submitBtn.innerText = "Unlock Experience";
+        submitBtn.disabled = false;
+    }
+}
 // ==========================================
 // 2. P5.JS BIOLUMINESCENT MEADOW CODE
 // ==========================================
@@ -245,21 +359,21 @@ function preload() {
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
-
+  
   bgMusic.setLoop(true);
   bgMusic.setVolume(0.4); 
-
+  
   calculateButtonPositions();
 
   let constraints = {
     video: { facingMode: { ideal: "environment" } },
     audio: false
   };
-
+  
   captureStream = createCapture(constraints);
   captureStream.elt.setAttribute('playsinline', ''); 
   captureStream.elt.setAttribute('muted', '');
-
+  
   for (let i = 0; i < 3; i++) {
     ambientOrbs.push({
       xPct: random(0.2, 0.8),
@@ -334,14 +448,14 @@ function handleInteraction() {
     clearMeadow();
     return; 
   }
-
+  
   if (!bgMusic.isPlaying() && !isMuted) {
     bgMusic.play();
   }
 
   if (mouseY < height - 65) {
     organisms.push(new Organism(mouseX, mouseY));
-
+    
     if (!isMuted && interactionSound.isLoaded()) {
       let randomPitch = random(0.9, 1.1);
       interactionSound.rate(randomPitch);
@@ -390,7 +504,7 @@ function drawAudioButton() {
     bezierVertex(8, -2, 6, 8, 0, 10);
     bezierVertex(-6, 8, -8, -2, 0, -10);
     endShape(CLOSE);
-
+    
     stroke(255, 100, 100, 230);
     strokeWeight(2.5);
     line(-12, 12, 12, -12);
@@ -404,7 +518,7 @@ function drawResetButton() {
   noStroke();
   fill(149, 225, 211, 80);
   ellipse(0, 0, btnRadius * 2, btnRadius * 2);
-
+  
   fill('#95e1d3'); 
   for (let a = 0; a < TWO_PI; a += THIRD_PI) { 
     push();
@@ -416,7 +530,7 @@ function drawResetButton() {
   ellipse(0, 0, 5, 5);
   pop();
 }
-
+  
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
   calculateButtonPositions();
@@ -446,14 +560,14 @@ class Organism {
     this.yPct = y < 0 ? y : y / height;
     this.isAutoSpawned = false;
     this.floorOffsetPct = random(0.02, 0.05); 
-
+    
     this.state = "SEED"; 
     this.fallSpeedPct = random(0.002, 0.005); 
     this.growSpeed = random(1.5, 3.0);
     this.swayOffset = random(1000);
     this.stemHeight = 0;
     this.heightRatio = random(0.25, 0.65);
-
+    
     this.flowerScale = 0;
     this.maxFlowerScale = random(14, 24);
     this.bloomSpeed = 0.03;
@@ -475,13 +589,13 @@ class Organism {
           this.yPct += this.fallSpeedPct;
         }
         this.xPct += wind;
-
+        
         let currentSeedPixelY = this.yPct * height;
         if (currentSeedPixelY >= targetAnchorY || this.yPct >= (1.0 - this.floorOffsetPct)) {
           this.state = "SPROUT";
         }
         break;
-
+        
       case "SPROUT":
         this.stemHeight += this.growSpeed;
         let maxAllowedStemHeight = targetAnchorY * this.heightRatio;
@@ -490,7 +604,7 @@ class Organism {
           this.state = "BLOOM";
         }
         break;
-
+        
       case "BLOOM":
         if (this.flowerScale < this.maxFlowerScale) {
           this.flowerScale += (this.maxFlowerScale - this.flowerScale) * this.bloomSpeed + 0.02;
@@ -506,14 +620,14 @@ class Organism {
     let currentAnchorX = this.xPct * width;
     let currentFloorOffset = height * this.floorOffsetPct;
     let currentAnchorY = height - currentFloorOffset;
-
+    
     let maxAllowedStemHeight = currentAnchorY * this.heightRatio;
     let globalSway = sin(frameCount * 0.008 + this.swayOffset) * 12 * (this.stemHeight / maxAllowedStemHeight);
 
     if (this.state === "SEED") {
       let seedPixelY = this.yPct * height;
       if (seedPixelY < 0) seedPixelY = -10; 
-
+      
       noStroke();
       fill(this.palette?.flower || '#fce38a');
       ellipse(currentAnchorX, seedPixelY, 6, 6);
@@ -525,7 +639,7 @@ class Organism {
       noFill();
       stroke(currentPalette.stem);
       strokeWeight(1.6); 
-
+      
       beginShape();
       let segments = 20;
       let currentTopX = currentAnchorX;
@@ -537,7 +651,7 @@ class Organism {
         let noiseFactor = noise(currentAnchorX * 0.01, currentY * 0.01 + frameCount * 0.002);
         let swayX = map(noiseFactor, 0, 1, -15, 15) * hRatio + (globalSway * hRatio);
         let currentX = currentAnchorX + swayX;
-
+        
         vertex(currentX, currentY);
         if (i === segments) {
           currentTopX = currentX;
