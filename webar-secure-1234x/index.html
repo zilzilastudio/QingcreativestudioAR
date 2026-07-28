@@ -76,167 +76,6 @@
       color: #95e1d3;
     }
 
-    #boxSerialDisplay {
-      font-size: 14px;
-      color: #fce38a;
-      margin-bottom: 20px;
-      opacity: 0.9;
-    }
-
-    .input-container {
-      position: relative;
-      width: 100%;
-      margin-bottom: 15px;
-    }
-
-    .login-box input {
-      width: 100%;
-      padding: 12px 45px 12px 12px; 
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      background: rgba(0, 0, 0, 0.2);
-      color: white;
-      border-radius: 8px;
-      font-size: 16px;
-      outline: none;
-      box-sizing: border-box;
-      text-align: center;
-    }
-
-    .toggle-password {
-      position: absolute;
-      right: 12px;
-      top: 50%;
-      transform: translateY(-50%);
-      background: none;
-      border: none;
-      color: rgba(255, 255, 255, 0.5);
-      cursor: pointer;
-      font-size: 14px;
-      padding: 4px;
-      user-select: none;
-    }
-    
-    .toggle-password:hover {
-      color: #95e1d3;
-    }
-
-    .login-box button.submit-btn {
-      width: 100%;
-      padding: 12px;
-      background: #95e1d3;
-      color: #121212;
-      border: none;
-      border-radius: 8px;
-      font-size: 16px;
-      font-weight: bold;
-      cursor: pointer;
-      transition: background 0.2s, opacity 0.2s;
-    }
-
-    .login-box button.submit-btn:hover {
-      background: #fce38a;
-    }
-
-    .login-box button.submit-btn:disabled {
-      opacity: 0.5;
-      background: #95e1d3;
-      cursor: not-allowed;
-    }
-
-    #productPage {
-      display: none; 
-    }
-
-    .copyright {
-      position: absolute;
-      bottom: 20px;
-      left: 20px;
-      color: rgba(255, 255, 255, 0.6);
-      font-size: 12px;
-      pointer-events: none; 
-      z-index: 10;
-    }
-
-    .watermark {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 2cm;
-      height: 2cm;
-      opacity: 0.15; 
-      pointer-events: none;
-      z-index: 1;
-    }
-<style>
-    body, html {
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-      background-color: #0d1117; 
-      user-select: none;
-      width: 100%;
-      height: 100%;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    }
-    
-    video {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      min-width: 100%;
-      min-height: 100%;
-      width: auto;
-      height: auto;
-      transform: translate(-50%, -50%);
-      object-fit: cover;
-      z-index: 1 !important; 
-    }
-
-    canvas {
-      display: block;
-      position: absolute;
-      top: 0;
-      left: 0;
-      z-index: 2 !important; 
-      background: transparent !important; 
-    }
-
-    #loginScreen {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(13, 17, 23, 0.95);
-      backdrop-filter: blur(10px);
-      z-index: 9999 !important; 
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      color: #ffffff;
-      text-align: center;
-      padding: 20px;
-      box-sizing: border-box;
-    }
-
-    .login-box {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      padding: 30px;
-      border-radius: 16px;
-      max-width: 360px;
-      width: 100%;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    }
-
-    .login-box h2 {
-      margin: 0 0 10px 0;
-      font-size: 22px;
-      color: #95e1d3;
-    }
-
     .login-subtitle {
       font-size: 13px;
       color: #fce38a;
@@ -264,7 +103,7 @@
     }
 
     .login-box input.passkey-input {
-      padding-right: 45px; /* Leave room for toggle eye icon */
+      padding-right: 45px;
     }
 
     .toggle-password {
@@ -333,7 +172,7 @@
       pointer-events: none;
       z-index: 1;
     }
-</style>
+  </style>
 </head>
 <body>
 
@@ -342,12 +181,10 @@
       <h2>Meadow Authorization</h2>
       <div class="login-subtitle">Please enter your serial number and passkey</div>
       
-      <!-- 1. SERIAL INPUT FIELD -->
       <div class="input-container">
         <input type="text" id="serialInput" placeholder="Serial Code (e.g. A739)" autocomplete="off" style="text-transform: uppercase;">
       </div>
 
-      <!-- 2. PASSKEY INPUT FIELD WITH TOGGLE EYE -->
       <div class="input-container">
         <input type="password" id="passwordInput" class="passkey-input" placeholder="Product Passkey" autocomplete="off">
         <button type="button" class="toggle-password" onclick="togglePasswordVisibility()" title="Toggle Password Visibility">👁️</button>
@@ -364,17 +201,15 @@
 
 <script>
 // ==========================================
-// 1. SECURITY & CONNECTION CONFIGURATION
+// 1. SECURITY & AUTHENTICATION CONFIG
 // ==========================================
-
-// Optional parameter reader if email or fallback parameters are supplied via URL
 const urlParams = new URLSearchParams(window.location.search);
 const emailParam = urlParams.get('email');
 
+// Single declaration of unlock state
 let isExperienceUnlocked = false;
 
 window.addEventListener('DOMContentLoaded', () => {
-    // Check if user previously logged in on this device
     const lastSerial = localStorage.getItem('last_authorized_serial');
     if (lastSerial && localStorage.getItem(`authorized_${lastSerial}`) === 'true') {
         unlockExperienceUILayout();
@@ -402,7 +237,6 @@ function togglePasswordVisibility() {
     }
 }
 
-// Generates a unique digital fingerprint based on user's hardware
 async function generateDeviceFingerprint() {
   const traits = [
     navigator.userAgent,
@@ -435,18 +269,13 @@ async function generateDeviceFingerprint() {
 }
 
 async function checkPassword() {
-    // ==========================================
-    // MOBILE & TABLET ONLY HARDWARE ENFORCEMENT
-    // ==========================================
     const isMobileOrTabletUA = /Mobi|Android|iPhone|iPod|iPad/i.test(navigator.userAgent);
     const isModerniPadTouch = (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     
     if (!isMobileOrTabletUA && !isModerniPadTouch) {
         return alert("Access Denied: This mobile AR experience is exclusive to smartphones and tablets. Laptops and Desktop PCs are not supported.");
     }
-    // ==========================================
 
-    // Capture BOTH Serial and Passkey from inputs
     const userSerial = document.getElementById('serialInput').value.trim().toUpperCase();
     const userPassword = document.getElementById('passwordInput').value.trim();
 
@@ -461,18 +290,17 @@ async function checkPassword() {
         const currentFingerprint = await generateDeviceFingerprint();
         const workerUrl = "https://auth.zilzilastudio.com";
         
-        // Dispatch transmission carrying BOTH serial AND passkey
         const response = await fetch(workerUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                serial: userSerial,          // 👈 User typed Serial (e.g., "A739")
-                password: userPassword,      // 👈 User typed Passkey (e.g., "Pass-102")
+                serial: userSerial,
+                password: userPassword,
                 fingerprint: currentFingerprint,
-                email: emailParam || null,   // Optional QR email parameter
-                product: "box"               // 👈 Target table identifier ("box_passwords")
+                email: emailParam || null,
+                product: "box"
             })
         });
 
@@ -492,8 +320,9 @@ async function checkPassword() {
         submitBtn.disabled = false;
     }
 }
+
 // ==========================================
-// P5.JS BIOLUMINESCENT MEADOW (FIXED & WORKING)
+// 2. P5.JS BIOLUMINESCENT MEADOW VISUALIZER
 // ==========================================
 const PALETTES = [
   { flower: '#fce38a', stem: '#95e1d3', glow: 'rgba(252, 227, 138, 0.2)' },
@@ -509,9 +338,6 @@ let captureStream;
 let bgMusic;
 let interactionSound;
 let isMuted = false;
-
-// ADDED: State flag set to true so interaction and auto-spawning works!
-let isExperienceUnlocked = true; 
 
 let btnX, btnY;
 let resetBtnX, resetBtnY;
@@ -536,7 +362,6 @@ function setup() {
     audio: false
   };
   
-  // Camera capture fallback handle
   try {
     captureStream = createCapture(constraints);
     if (captureStream && captureStream.elt) {
@@ -576,7 +401,6 @@ function draw() {
     if (org.isDead) organisms.splice(i, 1);
   }
 
-  // Auto-spawn ambient seeds periodically
   if (isExperienceUnlocked && frameCount % 120 === 0 && organisms.length < 45) {
     let autoSeed = new Organism(random(width), -10);
     autoSeed.isAutoSpawned = true;
@@ -595,7 +419,6 @@ function draw() {
   }
 }
 
-// User interaction events
 function mousePressed() {
   if (isExperienceUnlocked) handleInteraction();
 }
@@ -603,40 +426,34 @@ function mousePressed() {
 function touchStarted() {
   if (isExperienceUnlocked) {
     handleInteraction();
-    return false; // Prevent default scrolling on mobile touch
+    return false;
   }
 }
 
 function handleInteraction() {
-  // 1. Force Web Audio Context to wake up on user gesture
   if (typeof getAudioContext === 'function' && getAudioContext().state !== 'running') {
     getAudioContext().resume();
   }
 
-  // Check Audio Toggle Button
   let dAudio = dist(mouseX, mouseY, btnX, btnY);
   if (dAudio < btnRadius) {
     toggleAudio();
     return; 
   }
 
-  // Check Reset Button
   let dReset = dist(mouseX, mouseY, resetBtnX, resetBtnY);
   if (dReset < btnRadius) {
     clearMeadow();
     return; 
   }
   
-  // Start background music on first tap if not muted
   if (bgMusic.isLoaded() && !bgMusic.isPlaying() && !isMuted) {
     bgMusic.play();
   }
 
-  // Plant a flower seed on click/touch (above UI area)
   if (mouseY < height - 65) {
     organisms.push(new Organism(mouseX, mouseY));
     
-    // Play tap sound effect
     if (!isMuted && interactionSound.isLoaded()) {
       let randomPitch = random(0.9, 1.1);
       interactionSound.rate(randomPitch);
@@ -764,7 +581,6 @@ class Organism {
 
     switch (this.state) {
       case "SEED":
-        // Fixed falling logic
         this.yPct += this.fallSpeedPct;
         this.xPct += wind;
         
