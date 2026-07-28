@@ -210,6 +210,7 @@ const emailParam = urlParams.get('email');
 let isExperienceUnlocked = false;
 
 window.addEventListener('DOMContentLoaded', () => {
+    // Session persistent check if user was already authorized locally
     const lastSerial = localStorage.getItem('last_authorized_serial');
     if (lastSerial && localStorage.getItem(`authorized_${lastSerial}`) === 'true') {
         unlockExperienceUILayout();
@@ -421,7 +422,6 @@ function draw() {
   }
 }
 
-// User interactions track
 function mousePressed() {
   if (isExperienceUnlocked) handleInteraction();
 }
