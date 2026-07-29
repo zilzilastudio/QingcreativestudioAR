@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>Bioluminescent Meadow AR</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.sound.min.js"></script>
   
   <style>
     body, html {
@@ -232,9 +231,20 @@
 
 <script>
 // ==========================================
-// 1. SECURITY & SESSION MEMORY CONFIGURATION
+// 1. NATIVE BROWSER AUDIO SETUP (NO P5.SOUND DEPENDENCY)
 // ==========================================
+const basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
+const musicUrl = window.location.origin + basePath + 'Music.mp3';
+const kalimbaUrl = window.location.origin + basePath + 'Kalimba.mp3';
 
+const bgMusic = new Audio(musicUrl);
+bgMusic.loop = true;
+bgMusic.volume = 0.4;
+
+const kalimbaAudio = new Audio(kalimbaUrl);
+kalimbaAudio.volume = 0.8;
+
+let isMuted = false;
 let isExperienceUnlocked = false;
 
 // Auto-login on page load if saved in browser memory
@@ -252,26 +262,35 @@ function unlockExperienceUILayout() {
 }
 
 function enableAudioAndStart() {
-  // Resume Web Audio context explicitly upon user tap
-  if (typeof getAudioContext === 'function' && getAudioContext().state !== 'running') {
-    getAudioContext().resume();
+  isExperienceUnlocked = true;
+
+  if (document.getElementById('startAudioOverlay')) document.getElementById('startAudioOverlay').style.display = 'none';
+  if (document.getElementById('productPage')) document.getElementById('productPage').style.display = 'block';
+
+  // Play background music
+  if (!isMuted) {
+    bgMusic.play().then(() => {
+      console.log("Music.mp3 playing successfully!");
+    }).catch(err => {
+      console.error("Music playback prevented:", err);
+    });
   }
 
-  userStartAudio().then(() => {
-    isExperienceUnlocked = true;
+  // Pre-unlock Kalimba sound for low latency on touch
+  kalimbaAudio.play().then(() => {
+    kalimbaAudio.pause();
+    kalimbaAudio.currentTime = 0;
+  }).catch(() => {});
+}
 
-    if (document.getElementById('startAudioOverlay')) document.getElementById('startAudioOverlay').style.display = 'none';
-    if (document.getElementById('productPage')) document.getElementById('productPage').style.display = 'block';
-
-    // Start background music loop
-    if (bgMusic && bgMusic.isLoaded()) {
-      bgMusic.setLoop(true);
-      bgMusic.setVolume(0.4);
-      if (!bgMusic.isPlaying()) {
-        bgMusic.play();
-      }
-    }
-  }).catch(err => console.error("Audio activation failed:", err));
+function playKalimbaSound() {
+  if (isMuted) return;
+  
+  // Clone node allows rapid overlapping sounds when tapping fast
+  let soundClone = kalimbaAudio.cloneNode();
+  soundClone.volume = 0.8;
+  soundClone.playbackRate = 0.9 + Math.random() * 0.2; // subtle natural pitch variation
+  soundClone.play().catch(e => console.warn("Kalimba play error:", e));
 }
 
 function togglePasswordVisibility() {
@@ -366,7 +385,7 @@ async function checkPassword() {
 }
 
 // ==========================================
-// 2. P5.JS VISUALIZER & PATH RESOLUTION
+// 2. P5.JS VISUALIZER
 // ==========================================
 const PALETTES = [
   { flower: '#fce38a', stem: '#95e1d3', glow: 'rgba(252, 227, 138, 0.2)' },
@@ -378,33 +397,10 @@ const THIRD_PI = Math.PI / 3;
 
 let organisms = [];
 let ambientOrbs = [];
-let bgMusic;
-let interactionSound;
-
-let isMuted = false;
 
 let btnX, btnY;
 let resetBtnX, resetBtnY;
 let btnRadius = 25;
-
-function preload() {
-  soundFormats('mp3');
-
-  // Compute exact path root relative to the repository folder
-  let basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
-  let absoluteMusicPath = window.location.origin + basePath + 'Music.mp3';
-  let absoluteKalimbaPath = window.location.origin + basePath + 'Kalimba.mp3';
-
-  bgMusic = loadSound(absoluteMusicPath, 
-    () => console.log("Music.mp3 loaded successfully from:", absoluteMusicPath), 
-    (err) => console.error("Error loading Music.mp3:", err)
-  );
-
-  interactionSound = loadSound(absoluteKalimbaPath, 
-    () => console.log("Kalimba.mp3 loaded successfully from:", absoluteKalimbaPath), 
-    (err) => console.error("Error loading Kalimba.mp3:", err)
-  );
-}
 
 function setup() {
   let cnv = createCanvas(windowWidth, windowHeight);
@@ -490,10 +486,6 @@ function touchStarted() {
 }
 
 function handleInteraction() {
-  if (getAudioContext().state !== 'running') {
-    getAudioContext().resume();
-  }
-
   let dAudio = dist(mouseX, mouseY, btnX, btnY);
   if (dAudio < btnRadius) {
     toggleAudio();
@@ -506,31 +498,22 @@ function handleInteraction() {
     return; 
   }
 
-  if (bgMusic && bgMusic.isLoaded() && !bgMusic.isPlaying() && !isMuted) {
-    bgMusic.play();
+  if (!isMuted && bgMusic.paused) {
+    bgMusic.play().catch(() => {});
   }
 
   if (mouseY < height - 65) {
     organisms.push(new Organism(mouseX, mouseY));
-
-    // Play seed planting sound (Kalimba)
-    if (!isMuted && interactionSound && interactionSound.isLoaded()) {
-      let randomPitch = random(0.9, 1.1);
-      interactionSound.rate(randomPitch);
-      interactionSound.setVolume(0.8);
-      interactionSound.play();
-    }
+    playKalimbaSound(); // Play seed planting sound via Native HTML5 Audio
   }
 }
 
 function toggleAudio() {
   isMuted = !isMuted;
-  if (!bgMusic || !bgMusic.isLoaded()) return;
-
   if (isMuted) {
-    if (bgMusic.isPlaying()) bgMusic.pause();
+    bgMusic.pause();
   } else {
-    if (!bgMusic.isPlaying()) bgMusic.play();
+    bgMusic.play().catch(e => console.warn("Toggle audio error:", e));
   }
 }
 
