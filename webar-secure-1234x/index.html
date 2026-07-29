@@ -29,6 +29,7 @@
       transform: translate(-50%, -50%);
       object-fit: cover;
       z-index: 1 !important; 
+      transition: opacity 0.4s ease;
     }
 
     canvas {
@@ -231,7 +232,7 @@
 
 <script>
 // ==========================================
-// 1. NATIVE BROWSER AUDIO SETUP (NO P5.SOUND DEPENDENCY)
+// 1. NATIVE BROWSER AUDIO SETUP
 // ==========================================
 const basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
 const musicUrl = window.location.origin + basePath + 'Music.mp3';
@@ -246,6 +247,7 @@ kalimbaAudio.volume = 0.8;
 
 let isMuted = false;
 let isExperienceUnlocked = false;
+let isOriginalBg = false; // Toggle state for original vs camera background
 
 // Auto-login on page load if saved in browser memory
 document.addEventListener("DOMContentLoaded", () => {
@@ -267,16 +269,10 @@ function enableAudioAndStart() {
   if (document.getElementById('startAudioOverlay')) document.getElementById('startAudioOverlay').style.display = 'none';
   if (document.getElementById('productPage')) document.getElementById('productPage').style.display = 'block';
 
-  // Play background music
   if (!isMuted) {
-    bgMusic.play().then(() => {
-      console.log("Music.mp3 playing successfully!");
-    }).catch(err => {
-      console.error("Music playback prevented:", err);
-    });
+    bgMusic.play().catch(err => console.error("Music playback prevented:", err));
   }
 
-  // Pre-unlock Kalimba sound for low latency on touch
   kalimbaAudio.play().then(() => {
     kalimbaAudio.pause();
     kalimbaAudio.currentTime = 0;
@@ -285,11 +281,9 @@ function enableAudioAndStart() {
 
 function playKalimbaSound() {
   if (isMuted) return;
-  
-  // Clone node allows rapid overlapping sounds when tapping fast
   let soundClone = kalimbaAudio.cloneNode();
   soundClone.volume = 0.8;
-  soundClone.playbackRate = 0.9 + Math.random() * 0.2; // subtle natural pitch variation
+  soundClone.playbackRate = 0.9 + Math.random() * 0.2;
   soundClone.play().catch(e => console.warn("Kalimba play error:", e));
 }
 
@@ -400,7 +394,8 @@ let ambientOrbs = [];
 
 let btnX, btnY;
 let resetBtnX, resetBtnY;
-let btnRadius = 25;
+let bgBtnX, bgBtnY;
+let btnRadius = 22;
 
 function setup() {
   let cnv = createCanvas(windowWidth, windowHeight);
@@ -439,14 +434,21 @@ function initCameraFeed() {
 }
 
 function calculateButtonPositions() {
-  btnX = width - 40;
-  btnY = height - 40;
-  resetBtnX = width - 105;
-  resetBtnY = height - 40;
+  btnX = width - 35;
+  btnY = height - 35;
+  resetBtnX = width - 90;
+  resetBtnY = height - 35;
+  bgBtnX = width - 145;
+  bgBtnY = height - 35;
 }
 
 function draw() {
-  clear(); 
+  if (isOriginalBg) {
+    background(13, 17, 23); // Original dark background
+  } else {
+    clear(); // Transparent background overlaying live camera video
+  }
+
   drawAmbientOverlays();
 
   for (let i = organisms.length - 1; i >= 0; i--) {
@@ -466,11 +468,12 @@ function draw() {
     noStroke();
     fill(255, 255, 255, 140);
     textAlign(CENTER, CENTER);
-    textSize(14);
-    text("Tap screen to plant seeds onto your space", width / 2, height - 30);
+    textSize(13);
+    text("Tap screen to plant seeds onto your space", width / 2 - 40, height - 35);
 
     drawAudioButton();
     drawResetButton();
+    drawBgToggleButton();
   }
 }
 
@@ -498,13 +501,19 @@ function handleInteraction() {
     return; 
   }
 
+  let dBg = dist(mouseX, mouseY, bgBtnX, bgBtnY);
+  if (dBg < btnRadius) {
+    toggleBackground();
+    return;
+  }
+
   if (!isMuted && bgMusic.paused) {
     bgMusic.play().catch(() => {});
   }
 
-  if (mouseY < height - 65) {
+  if (mouseY < height - 60) {
     organisms.push(new Organism(mouseX, mouseY));
-    playKalimbaSound(); // Play seed planting sound via Native HTML5 Audio
+    playKalimbaSound();
   }
 }
 
@@ -514,6 +523,14 @@ function toggleAudio() {
     bgMusic.pause();
   } else {
     bgMusic.play().catch(e => console.warn("Toggle audio error:", e));
+  }
+}
+
+function toggleBackground() {
+  isOriginalBg = !isOriginalBg;
+  const videoElement = document.getElementById('cameraVideo');
+  if (videoElement) {
+    videoElement.style.opacity = isOriginalBg ? "0" : "1";
   }
 }
 
@@ -533,24 +550,24 @@ function drawAudioButton() {
     for (let a = 0; a < TWO_PI; a += HALF_PI) {
       push();
       rotate(a + QUARTER_PI);
-      ellipse(8, 0, 16, 12);
+      ellipse(7, 0, 14, 10);
       pop();
     }
     fill(255, 230);
-    ellipse(0, 0, 6, 6);
+    ellipse(0, 0, 5, 5);
   } else {
     fill('rgba(0,0,0,0.5)');
     stroke('#fce38a');
     strokeWeight(2);
     beginShape();
-    vertex(0, -10);
-    bezierVertex(8, -2, 6, 8, 0, 10);
-    bezierVertex(-6, 8, -8, -2, 0, -10);
+    vertex(0, -8);
+    bezierVertex(6, -2, 5, 6, 0, 8);
+    bezierVertex(-5, 6, -6, -2, 0, -8);
     endShape(CLOSE);
 
     stroke(255, 100, 100, 230);
-    strokeWeight(2.5);
-    line(-12, 12, 12, -12);
+    strokeWeight(2);
+    line(-10, 10, 10, -10);
   }
   pop();
 }
@@ -566,10 +583,31 @@ function drawResetButton() {
   for (let a = 0; a < TWO_PI; a += THIRD_PI) { 
     push();
     rotate(a);
-    ellipse(6, 0, 12, 6); 
+    ellipse(5, 0, 10, 5); 
     pop();
   }
   fill('#fce38a'); 
+  ellipse(0, 0, 4, 4);
+  pop();
+}
+
+// Additional Flower Button for Background Toggle
+function drawBgToggleButton() {
+  push();
+  translate(bgBtnX, bgBtnY);
+  noStroke();
+  fill(252, 227, 138, isOriginalBg ? 90 : 40);
+  ellipse(0, 0, btnRadius * 2, btnRadius * 2);
+
+  fill(isOriginalBg ? '#95e1d3' : '#fce38a'); 
+  let petNum = 5;
+  for (let i = 0; i < petNum; i++) { 
+    push();
+    rotate((TWO_PI / petNum) * i);
+    ellipse(6, 0, 10, 6); 
+    pop();
+  }
+  fill(255, 255, 255, 220); 
   ellipse(0, 0, 5, 5);
   pop();
 }
@@ -589,7 +627,7 @@ function drawAmbientOverlays() {
     let currentY = height * orb.yPct;
     noStroke();
     for (let r = currentSize; r > 0; r -= 20) {
-      let alpha = map(r, 0, currentSize, 8, 0); 
+      let alpha = map(r, 0, currentSize, isOriginalBg ? 12 : 8, 0); 
       fill(74, 144, 226, alpha);
       ellipse(currentX, currentY, r, r);
     }
@@ -602,14 +640,13 @@ class Organism {
     this.xPct = x / width;
     this.yPct = y < 0 ? y : y / height;
     this.isAutoSpawned = false;
-    this.floorOffsetPct = random(0.02, 0.05); 
 
     this.state = "SEED"; 
-    this.fallSpeedPct = random(0.002, 0.005); 
+    this.fallSpeedPct = random(0.003, 0.006); 
     this.growSpeed = random(1.5, 3.0);
     this.swayOffset = random(1000);
     this.stemHeight = 0;
-    this.heightRatio = random(0.25, 0.65);
+    this.heightRatio = random(0.25, 0.60);
 
     this.flowerScale = 0;
     this.maxFlowerScale = random(14, 24);
@@ -621,8 +658,9 @@ class Organism {
   update() {
     let t = frameCount * 0.01;
     let wind = sin(t + this.swayOffset) * 0.0005;
-    let currentFloorOffset = height * this.floorOffsetPct;
-    let targetAnchorY = height - currentFloorOffset;
+    
+    // Unified root baseline line across all screens (height - 40px)
+    let targetAnchorY = height - 40;
 
     switch (this.state) {
       case "SEED":
@@ -634,7 +672,7 @@ class Organism {
         this.xPct += wind;
 
         let currentSeedPixelY = this.yPct * height;
-        if (currentSeedPixelY >= targetAnchorY || this.yPct >= (1.0 - this.floorOffsetPct)) {
+        if (currentSeedPixelY >= targetAnchorY) {
           this.state = "SPROUT";
         }
         break;
@@ -661,8 +699,8 @@ class Organism {
   display() {
     push();
     let currentAnchorX = this.xPct * width;
-    let currentFloorOffset = height * this.floorOffsetPct;
-    let currentAnchorY = height - currentFloorOffset;
+    // Unified root baseline line across all screens
+    let currentAnchorY = height - 40;
 
     let maxAllowedStemHeight = currentAnchorY * this.heightRatio;
     let globalSway = sin(frameCount * 0.008 + this.swayOffset) * 12 * (this.stemHeight / maxAllowedStemHeight);
