@@ -140,6 +140,37 @@
       cursor: not-allowed;
     }
 
+    /* Tap to Play Screen overlay */
+    #startAudioOverlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(13, 17, 23, 0.85);
+      backdrop-filter: blur(8px);
+      z-index: 9998 !important;
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: #ffffff;
+      cursor: pointer;
+    }
+
+    #startAudioOverlay h1 {
+      font-size: 24px;
+      color: #fce38a;
+      margin-bottom: 10px;
+      letter-spacing: 1px;
+    }
+
+    #startAudioOverlay p {
+      font-size: 14px;
+      color: #95e1d3;
+      opacity: 0.8;
+    }
+
     #productPage {
       display: none; 
     }
@@ -186,6 +217,12 @@
     </div>
   </div>
 
+  <!-- Tap to Play Overlay -->
+  <div id="startAudioOverlay" onclick="enableAudioAndStart()">
+    <h1>Tap to Start Experience</h1>
+    <p>Tap anywhere on the screen to enable sound</p>
+  </div>
+
   <div id="productPage">
     <div class="copyright">© 2026 Qingcreativestudio. All rights reserved</div>
     <img src="watermark.png" alt="" class="watermark">
@@ -197,20 +234,25 @@
 // ==========================================
 
 let isExperienceUnlocked = false;
+let audioStarted = false;
 
 function unlockExperienceUILayout() {
-    isExperienceUnlocked = true;
     if (document.getElementById('loginScreen')) document.getElementById('loginScreen').style.display = 'none';
-    if (document.getElementById('productPage')) document.getElementById('productPage').style.display = 'block';
+    if (document.getElementById('startAudioOverlay')) document.getElementById('startAudioOverlay').style.display = 'flex';
+}
 
-    // Directly trigger AudioContext resume & music playback on the user's unlock gesture
-    if (typeof getAudioContext === 'function') {
-        getAudioContext().resume().then(() => {
-            if (bgMusic && bgMusic.isLoaded() && !bgMusic.isPlaying() && !isMuted) {
-                bgMusic.play();
-            }
-        });
-    }
+function enableAudioAndStart() {
+    userStartAudio().then(() => {
+        isExperienceUnlocked = true;
+        audioStarted = true;
+
+        if (document.getElementById('startAudioOverlay')) document.getElementById('startAudioOverlay').style.display = 'none';
+        if (document.getElementById('productPage')) document.getElementById('productPage').style.display = 'block';
+
+        if (bgMusic && bgMusic.isLoaded() && !bgMusic.isPlaying() && !isMuted) {
+            bgMusic.play();
+        }
+    });
 }
 
 function togglePasswordVisibility() {
@@ -322,7 +364,6 @@ let ambientOrbs = [];
 let captureStream;
 let bgMusic;
 let interactionSound;
-let watermarkImg;
 
 let isMuted = false;
 
@@ -333,7 +374,6 @@ let btnRadius = 25;
 function preload() {
   soundFormats('mp3');
   
-  // Explicit relative paths targeting files inside webar-secure-1234x
   bgMusic = loadSound('./Music.mp3', 
     () => console.log("Music loaded successfully"), 
     (err) => console.error("Error loading Music.mp3:", err)
@@ -342,11 +382,6 @@ function preload() {
   interactionSound = loadSound('./Kalimba.mp3', 
     () => console.log("Kalimba loaded successfully"), 
     (err) => console.error("Error loading Kalimba.mp3:", err)
-  );
-
-  watermarkImg = loadImage('./watermark.png',
-    () => console.log("Watermark loaded successfully"),
-    (err) => console.error("Error loading watermark.png:", err)
   );
 }
 
@@ -451,10 +486,11 @@ function handleInteraction() {
   if (mouseY < height - 65) {
     organisms.push(new Organism(mouseX, mouseY));
 
+    // Kalimba sound effect when planting seed
     if (!isMuted && interactionSound && interactionSound.isLoaded()) {
       let randomPitch = random(0.9, 1.1);
       interactionSound.rate(randomPitch);
-      interactionSound.setVolume(0.6);
+      interactionSound.setVolume(0.7);
       interactionSound.play();
     }
   }
