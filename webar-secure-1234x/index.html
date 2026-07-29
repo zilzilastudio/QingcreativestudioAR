@@ -19,7 +19,7 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
     
-    video {
+    #cameraVideo {
       position: absolute;
       top: 50%;
       left: 50%;
@@ -140,7 +140,6 @@
       cursor: not-allowed;
     }
 
-    /* Tap to Play Screen overlay */
     #startAudioOverlay {
       position: fixed;
       top: 0;
@@ -200,6 +199,9 @@
 </head>
 <body>
 
+  <!-- Video element for live AR background feed -->
+  <video id="cameraVideo" autoplay playsinline muted></video>
+
   <div id="loginScreen">
     <div class="login-box">
       <h2>Meadow Authorization</h2>
@@ -217,7 +219,7 @@
     </div>
   </div>
 
-  <!-- Tap to Play Overlay -->
+  <!-- Tap to Play Audio Transition -->
   <div id="startAudioOverlay" onclick="enableAudioAndStart()">
     <h1>Tap to Start Experience</h1>
     <p>Tap anywhere on the screen to enable sound</p>
@@ -234,7 +236,6 @@
 // ==========================================
 
 let isExperienceUnlocked = false;
-let audioStarted = false;
 
 function unlockExperienceUILayout() {
     if (document.getElementById('loginScreen')) document.getElementById('loginScreen').style.display = 'none';
@@ -242,17 +243,22 @@ function unlockExperienceUILayout() {
 }
 
 function enableAudioAndStart() {
+    // Explicit user interaction required to unlock Web Audio in modern browsers
     userStartAudio().then(() => {
         isExperienceUnlocked = true;
-        audioStarted = true;
 
         if (document.getElementById('startAudioOverlay')) document.getElementById('startAudioOverlay').style.display = 'none';
         if (document.getElementById('productPage')) document.getElementById('productPage').style.display = 'block';
 
-        if (bgMusic && bgMusic.isLoaded() && !bgMusic.isPlaying() && !isMuted) {
-            bgMusic.play();
+        // Play background music
+        if (bgMusic) {
+            bgMusic.setLoop(true);
+            bgMusic.setVolume(0.4);
+            if (!bgMusic.isPlaying()) {
+                bgMusic.play();
+            }
         }
-    });
+    }).catch(err => console.error("Audio activation failed:", err));
 }
 
 function togglePasswordVisibility() {
@@ -361,7 +367,6 @@ const THIRD_PI = Math.PI / 3;
 
 let organisms = [];
 let ambientOrbs = [];
-let captureStream;
 let bgMusic;
 let interactionSound;
 
@@ -375,35 +380,23 @@ function preload() {
   soundFormats('mp3');
   
   bgMusic = loadSound('./Music.mp3', 
-    () => console.log("Music loaded successfully"), 
+    () => console.log("Music.mp3 loaded successfully"), 
     (err) => console.error("Error loading Music.mp3:", err)
   );
 
   interactionSound = loadSound('./Kalimba.mp3', 
-    () => console.log("Kalimba loaded successfully"), 
+    () => console.log("Kalimba.mp3 loaded successfully"), 
     (err) => console.error("Error loading Kalimba.mp3:", err)
   );
 }
 
 function setup() {
-  createCanvas(windowWidth, windowHeight);
-
-  if (bgMusic) {
-    bgMusic.setLoop(true);
-    bgMusic.setVolume(0.4); 
-  }
+  // Setup transparent canvas for AR overlay
+  let cnv = createCanvas(windowWidth, windowHeight);
+  cnv.style('background', 'transparent');
 
   calculateButtonPositions();
-
-  let constraints = {
-    video: { facingMode: { ideal: "environment" } },
-    audio: false
-  };
-
-  captureStream = createCapture(constraints);
-  captureStream.elt.setAttribute('playsinline', ''); 
-  captureStream.elt.setAttribute('muted', '');
-  captureStream.hide();
+  initCameraFeed();
 
   for (let i = 0; i < 3; i++) {
     ambientOrbs.push({
@@ -411,6 +404,26 @@ function setup() {
       yPct: random(0.1, 0.4),
       sizeRatio: random(0.2, 0.4),
       phase: random(100)
+    });
+  }
+}
+
+// Initialize video camera feed explicitly
+function initCameraFeed() {
+  const videoElement = document.getElementById('cameraVideo');
+  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } },
+      audio: false
+    })
+    .then((stream) => {
+      videoElement.srcObject = stream;
+    })
+    .catch((err) => {
+      console.warn("Environmental camera unavailable, falling back to default user camera:", err);
+      navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+      .then((stream) => { videoElement.srcObject = stream; })
+      .catch((e) => console.error("Camera access denied or unreadable:", e));
     });
   }
 }
@@ -423,7 +436,7 @@ function calculateButtonPositions() {
 }
 
 function draw() {
-  clear(); 
+  clear(); // Clear canvas frame to maintain camera background transparency
   drawAmbientOverlays();
 
   for (let i = organisms.length - 1; i >= 0; i--) {
@@ -486,11 +499,11 @@ function handleInteraction() {
   if (mouseY < height - 65) {
     organisms.push(new Organism(mouseX, mouseY));
 
-    // Kalimba sound effect when planting seed
+    // Play seed planting sound (Kalimba)
     if (!isMuted && interactionSound && interactionSound.isLoaded()) {
       let randomPitch = random(0.9, 1.1);
       interactionSound.rate(randomPitch);
-      interactionSound.setVolume(0.7);
+      interactionSound.setVolume(0.8);
       interactionSound.play();
     }
   }
