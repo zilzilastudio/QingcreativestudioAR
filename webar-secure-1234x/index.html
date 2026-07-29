@@ -206,7 +206,7 @@ function unlockExperienceUILayout() {
     // Directly trigger AudioContext resume & music playback on the user's unlock gesture
     if (typeof getAudioContext === 'function') {
         getAudioContext().resume().then(() => {
-            if (bgMusic && !bgMusic.isPlaying() && !isMuted) {
+            if (bgMusic && bgMusic.isLoaded() && !bgMusic.isPlaying() && !isMuted) {
                 bgMusic.play();
             }
         });
@@ -307,7 +307,7 @@ async function checkPassword() {
 }
 
 // ==========================================
-// 2. P5.JS BIOLUMINESCENT MEADOW CODE
+// 2. P5.JS BIOLUMINESCENT MEADOW VISUALIZER
 // ==========================================
 const PALETTES = [
   { flower: '#fce38a', stem: '#95e1d3', glow: 'rgba(252, 227, 138, 0.2)' },
@@ -322,6 +322,8 @@ let ambientOrbs = [];
 let captureStream;
 let bgMusic;
 let interactionSound;
+let watermarkImg;
+
 let isMuted = false;
 
 let btnX, btnY;
@@ -330,27 +332,44 @@ let btnRadius = 25;
 
 function preload() {
   soundFormats('mp3');
-  bgMusic = loadSound('Music.mp3');
-  interactionSound = loadSound('Kalimba.mp3');
+  
+  // Explicit relative paths targeting files inside webar-secure-1234x
+  bgMusic = loadSound('./Music.mp3', 
+    () => console.log("Music loaded successfully"), 
+    (err) => console.error("Error loading Music.mp3:", err)
+  );
+
+  interactionSound = loadSound('./Kalimba.mp3', 
+    () => console.log("Kalimba loaded successfully"), 
+    (err) => console.error("Error loading Kalimba.mp3:", err)
+  );
+
+  watermarkImg = loadImage('./watermark.png',
+    () => console.log("Watermark loaded successfully"),
+    (err) => console.error("Error loading watermark.png:", err)
+  );
 }
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
-  
-  bgMusic.setLoop(true);
-  bgMusic.setVolume(0.4); 
-  
+
+  if (bgMusic) {
+    bgMusic.setLoop(true);
+    bgMusic.setVolume(0.4); 
+  }
+
   calculateButtonPositions();
 
   let constraints = {
     video: { facingMode: { ideal: "environment" } },
     audio: false
   };
-  
+
   captureStream = createCapture(constraints);
   captureStream.elt.setAttribute('playsinline', ''); 
   captureStream.elt.setAttribute('muted', '');
-  
+  captureStream.hide();
+
   for (let i = 0; i < 3; i++) {
     ambientOrbs.push({
       xPct: random(0.2, 0.8),
@@ -409,41 +428,46 @@ function touchStarted() {
 }
 
 function handleInteraction() {
-  if (typeof getAudioContext === 'function' && getAudioContext().state !== 'running') {
+  if (getAudioContext().state !== 'running') {
     getAudioContext().resume();
   }
 
-  // 1. Audio Button (Yellow Flower)
   let dAudio = dist(mouseX, mouseY, btnX, btnY);
   if (dAudio < btnRadius) {
     toggleAudio();
     return; 
   }
 
-  // 2. Clear Meadow Button
   let dReset = dist(mouseX, mouseY, resetBtnX, resetBtnY);
   if (dReset < btnRadius) {
     clearMeadow();
     return; 
   }
 
-  // 3. Plant Seed anywhere on screen, dropping to absolute floor
-  organisms.push(new Organism(mouseX, mouseY));
-  
-  if (interactionSound && interactionSound.isLoaded()) {
-    let randomPitch = random(0.9, 1.1);
-    interactionSound.rate(randomPitch);
-    interactionSound.setVolume(0.6);
-    interactionSound.play();
+  if (bgMusic && bgMusic.isLoaded() && !bgMusic.isPlaying() && !isMuted) {
+    bgMusic.play();
+  }
+
+  if (mouseY < height - 65) {
+    organisms.push(new Organism(mouseX, mouseY));
+
+    if (!isMuted && interactionSound && interactionSound.isLoaded()) {
+      let randomPitch = random(0.9, 1.1);
+      interactionSound.rate(randomPitch);
+      interactionSound.setVolume(0.6);
+      interactionSound.play();
+    }
   }
 }
 
 function toggleAudio() {
   isMuted = !isMuted;
+  if (!bgMusic || !bgMusic.isLoaded()) return;
+
   if (isMuted) {
-    if (bgMusic && bgMusic.isPlaying()) bgMusic.pause();
+    if (bgMusic.isPlaying()) bgMusic.pause();
   } else {
-    if (bgMusic && !bgMusic.isPlaying()) bgMusic.play();
+    if (!bgMusic.isPlaying()) bgMusic.play();
   }
 }
 
@@ -477,7 +501,7 @@ function drawAudioButton() {
     bezierVertex(8, -2, 6, 8, 0, 10);
     bezierVertex(-6, 8, -8, -2, 0, -10);
     endShape(CLOSE);
-    
+
     stroke(255, 100, 100, 230);
     strokeWeight(2.5);
     line(-12, 12, 12, -12);
@@ -491,7 +515,7 @@ function drawResetButton() {
   noStroke();
   fill(149, 225, 211, 80);
   ellipse(0, 0, btnRadius * 2, btnRadius * 2);
-  
+
   fill('#95e1d3'); 
   for (let a = 0; a < TWO_PI; a += THIRD_PI) { 
     push();
@@ -503,7 +527,7 @@ function drawResetButton() {
   ellipse(0, 0, 5, 5);
   pop();
 }
-  
+
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
   calculateButtonPositions();
@@ -532,14 +556,15 @@ class Organism {
     this.xPct = x / width;
     this.yPct = y < 0 ? y : y / height;
     this.isAutoSpawned = false;
-    
+    this.floorOffsetPct = random(0.02, 0.05); 
+
     this.state = "SEED"; 
-    this.fallSpeedPct = random(0.003, 0.006); 
+    this.fallSpeedPct = random(0.002, 0.005); 
     this.growSpeed = random(1.5, 3.0);
     this.swayOffset = random(1000);
     this.stemHeight = 0;
     this.heightRatio = random(0.25, 0.65);
-    
+
     this.flowerScale = 0;
     this.maxFlowerScale = random(14, 24);
     this.bloomSpeed = 0.03;
@@ -550,6 +575,8 @@ class Organism {
   update() {
     let t = frameCount * 0.01;
     let wind = sin(t + this.swayOffset) * 0.0005;
+    let currentFloorOffset = height * this.floorOffsetPct;
+    let targetAnchorY = height - currentFloorOffset;
 
     switch (this.state) {
       case "SEED":
@@ -559,23 +586,22 @@ class Organism {
           this.yPct += this.fallSpeedPct;
         }
         this.xPct += wind;
-        
-        // Strict bottom landing condition: when seed hits yPct >= 1.0 (bottom pixel), anchor & sprout
-        if (this.yPct >= 1.0) {
-          this.yPct = 1.0;
+
+        let currentSeedPixelY = this.yPct * height;
+        if (currentSeedPixelY >= targetAnchorY || this.yPct >= (1.0 - this.floorOffsetPct)) {
           this.state = "SPROUT";
         }
         break;
-        
+
       case "SPROUT":
         this.stemHeight += this.growSpeed;
-        let maxAllowedStemHeight = height * this.heightRatio;
+        let maxAllowedStemHeight = targetAnchorY * this.heightRatio;
         if (this.stemHeight >= maxAllowedStemHeight) {
           this.stemHeight = maxAllowedStemHeight;
           this.state = "BLOOM";
         }
         break;
-        
+
       case "BLOOM":
         if (this.flowerScale < this.maxFlowerScale) {
           this.flowerScale += (this.maxFlowerScale - this.flowerScale) * this.bloomSpeed + 0.02;
@@ -589,14 +615,16 @@ class Organism {
   display() {
     push();
     let currentAnchorX = this.xPct * width;
-    let currentAnchorY = height; // Locked strictly to the exact bottom pixel of the screen
+    let currentFloorOffset = height * this.floorOffsetPct;
+    let currentAnchorY = height - currentFloorOffset;
 
     let maxAllowedStemHeight = currentAnchorY * this.heightRatio;
     let globalSway = sin(frameCount * 0.008 + this.swayOffset) * 12 * (this.stemHeight / maxAllowedStemHeight);
 
     if (this.state === "SEED") {
       let seedPixelY = this.yPct * height;
-      
+      if (seedPixelY < 0) seedPixelY = -10; 
+
       noStroke();
       fill(this.palette?.flower || '#fce38a');
       ellipse(currentAnchorX, seedPixelY, 6, 6);
@@ -608,7 +636,7 @@ class Organism {
       noFill();
       stroke(currentPalette.stem);
       strokeWeight(1.6); 
-      
+
       beginShape();
       let segments = 20;
       let currentTopX = currentAnchorX;
@@ -620,7 +648,7 @@ class Organism {
         let noiseFactor = noise(currentAnchorX * 0.01, currentY * 0.01 + frameCount * 0.002);
         let swayX = map(noiseFactor, 0, 1, -15, 15) * hRatio + (globalSway * hRatio);
         let currentX = currentAnchorX + swayX;
-        
+
         vertex(currentX, currentY);
         if (i === segments) {
           currentTopX = currentX;
