@@ -199,7 +199,7 @@
 </head>
 <body>
 
-  <!-- Video element for live AR background feed -->
+  <!-- Live Camera AR Video Feed -->
   <video id="cameraVideo" autoplay playsinline muted></video>
 
   <div id="loginScreen">
@@ -219,7 +219,7 @@
     </div>
   </div>
 
-  <!-- Tap to Play Audio Transition -->
+  <!-- Tap to Start Audio Transition -->
   <div id="startAudioOverlay" onclick="enableAudioAndStart()">
     <h1>Tap to Start Experience</h1>
     <p>Tap anywhere on the screen to enable sound</p>
@@ -227,50 +227,63 @@
 
   <div id="productPage">
     <div class="copyright">© 2026 Qingcreativestudio. All rights reserved</div>
-    <img src="watermark.png" alt="" class="watermark">
+    <img src="watermark.png" alt="Watermark" class="watermark">
   </div>
 
 <script>
 // ==========================================
-// 1. SECURITY & CONNECTION CONFIGURATION
+// 1. SECURITY & SESSION MEMORY CONFIGURATION
 // ==========================================
 
 let isExperienceUnlocked = false;
 
+// Auto-login on page load if saved in browser memory
+document.addEventListener("DOMContentLoaded", () => {
+  const savedAuth = localStorage.getItem("meadow_authenticated");
+  if (savedAuth === "true") {
+    unlockExperienceUILayout();
+  }
+});
+
 function unlockExperienceUILayout() {
-    if (document.getElementById('loginScreen')) document.getElementById('loginScreen').style.display = 'none';
-    if (document.getElementById('startAudioOverlay')) document.getElementById('startAudioOverlay').style.display = 'flex';
+  localStorage.setItem("meadow_authenticated", "true");
+  if (document.getElementById('loginScreen')) document.getElementById('loginScreen').style.display = 'none';
+  if (document.getElementById('startAudioOverlay')) document.getElementById('startAudioOverlay').style.display = 'flex';
 }
 
 function enableAudioAndStart() {
-    // Explicit user interaction required to unlock Web Audio in modern browsers
-    userStartAudio().then(() => {
-        isExperienceUnlocked = true;
+  // Resume Web Audio context explicitly upon user tap
+  if (typeof getAudioContext === 'function' && getAudioContext().state !== 'running') {
+    getAudioContext().resume();
+  }
 
-        if (document.getElementById('startAudioOverlay')) document.getElementById('startAudioOverlay').style.display = 'none';
-        if (document.getElementById('productPage')) document.getElementById('productPage').style.display = 'block';
+  userStartAudio().then(() => {
+    isExperienceUnlocked = true;
 
-        // Play background music
-        if (bgMusic) {
-            bgMusic.setLoop(true);
-            bgMusic.setVolume(0.4);
-            if (!bgMusic.isPlaying()) {
-                bgMusic.play();
-            }
-        }
-    }).catch(err => console.error("Audio activation failed:", err));
+    if (document.getElementById('startAudioOverlay')) document.getElementById('startAudioOverlay').style.display = 'none';
+    if (document.getElementById('productPage')) document.getElementById('productPage').style.display = 'block';
+
+    // Start background music loop
+    if (bgMusic && bgMusic.isLoaded()) {
+      bgMusic.setLoop(true);
+      bgMusic.setVolume(0.4);
+      if (!bgMusic.isPlaying()) {
+        bgMusic.play();
+      }
+    }
+  }).catch(err => console.error("Audio activation failed:", err));
 }
 
 function togglePasswordVisibility() {
-    const passwordInput = document.getElementById('passwordInput');
-    const toggleBtn = document.querySelector('.toggle-password');
-    if (passwordInput.type === "password") {
-        passwordInput.type = "text";
-        toggleBtn.textContent = "🙈"; 
-    } else {
-        passwordInput.type = "password";
-        toggleBtn.textContent = "👁️"; 
-    }
+  const passwordInput = document.getElementById('passwordInput');
+  const toggleBtn = document.querySelector('.toggle-password');
+  if (passwordInput.type === "password") {
+    passwordInput.type = "text";
+    toggleBtn.textContent = "🙈"; 
+  } else {
+    passwordInput.type = "password";
+    toggleBtn.textContent = "👁️"; 
+  }
 }
 
 async function generateDeviceFingerprint() {
@@ -305,57 +318,55 @@ async function generateDeviceFingerprint() {
 }
 
 async function checkPassword() {
-    const serialNumber = document.getElementById('serialInput').value.trim();
-    if (!serialNumber) return alert("Please input a valid product serial identification code.");
+  const serialNumber = document.getElementById('serialInput').value.trim();
+  if (!serialNumber) return alert("Please input a valid product serial identification code.");
 
-    const userPassword = document.getElementById('passwordInput').value.trim();
-    if (!userPassword) return alert("Please input your package activation passkey.");
+  const userPassword = document.getElementById('passwordInput').value.trim();
+  if (!userPassword) return alert("Please input your package activation passkey.");
 
-    const isMobileOrTabletUA = /Mobi|Android|iPhone|iPod|iPad/i.test(navigator.userAgent);
-    const isModerniPadTouch = (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isMobileOrTabletUA = /Mobi|Android|iPhone|iPod|iPad/i.test(navigator.userAgent);
+  const isModerniPadTouch = (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  
+  if (!isMobileOrTabletUA && !isModerniPadTouch) {
+    return alert("Access Denied: This mobile AR experience is exclusive to smartphones and tablets. Laptops and Desktop PCs are not supported.");
+  }
+
+  const submitBtn = document.getElementById('submitBtn');
+  submitBtn.innerText = "Verifying...";
+  submitBtn.disabled = true;
+
+  try {
+    const currentFingerprint = await generateDeviceFingerprint();
+    const workerUrl = "https://auth.zilzilastudio.com";
     
-    if (!isMobileOrTabletUA && !isModerniPadTouch) {
-        return alert("Access Denied: This mobile AR experience is exclusive to smartphones and tablets. Laptops and Desktop PCs are not supported.");
+    const response = await fetch(workerUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        serial: serialNumber,
+        password: userPassword,
+        fingerprint: currentFingerprint,
+        product: "box"
+      })
+    });
+
+    const result = await response.json();
+
+    if (response.ok && result.allowed) {
+      unlockExperienceUILayout();
+    } else {
+      alert(result.error || "Authentication failed. Incorrect passkey assets.");
     }
-
-    const submitBtn = document.getElementById('submitBtn');
-    submitBtn.innerText = "Verifying...";
-    submitBtn.disabled = true;
-
-    try {
-        const currentFingerprint = await generateDeviceFingerprint();
-        const workerUrl = "https://auth.zilzilastudio.com";
-        
-        const response = await fetch(workerUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                serial: serialNumber,
-                password: userPassword,
-                fingerprint: currentFingerprint,
-                product: "box"
-            })
-        });
-
-        const result = await response.json();
-
-        if (response.ok && result.allowed) {
-            unlockExperienceUILayout();
-        } else {
-            alert(result.error || "Authentication failed. Incorrect passkey assets.");
-        }
-    } catch (error) {
-        alert("Authorization connection dropped or failed.\nReason: " + error.message);
-    } finally {
-        submitBtn.innerText = "Unlock Experience";
-        submitBtn.disabled = false;
-    }
+  } catch (error) {
+    alert("Authorization connection dropped or failed.\nReason: " + error.message);
+  } finally {
+    submitBtn.innerText = "Unlock Experience";
+    submitBtn.disabled = false;
+  }
 }
 
 // ==========================================
-// 2. P5.JS BIOLUMINESCENT MEADOW VISUALIZER
+// 2. P5.JS VISUALIZER & PATH RESOLUTION
 // ==========================================
 const PALETTES = [
   { flower: '#fce38a', stem: '#95e1d3', glow: 'rgba(252, 227, 138, 0.2)' },
@@ -378,20 +389,24 @@ let btnRadius = 25;
 
 function preload() {
   soundFormats('mp3');
-  
-  bgMusic = loadSound('./Music.mp3', 
-    () => console.log("Music.mp3 loaded successfully"), 
+
+  // Compute exact path root relative to the repository folder
+  let basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
+  let absoluteMusicPath = window.location.origin + basePath + 'Music.mp3';
+  let absoluteKalimbaPath = window.location.origin + basePath + 'Kalimba.mp3';
+
+  bgMusic = loadSound(absoluteMusicPath, 
+    () => console.log("Music.mp3 loaded successfully from:", absoluteMusicPath), 
     (err) => console.error("Error loading Music.mp3:", err)
   );
 
-  interactionSound = loadSound('./Kalimba.mp3', 
-    () => console.log("Kalimba.mp3 loaded successfully"), 
+  interactionSound = loadSound(absoluteKalimbaPath, 
+    () => console.log("Kalimba.mp3 loaded successfully from:", absoluteKalimbaPath), 
     (err) => console.error("Error loading Kalimba.mp3:", err)
   );
 }
 
 function setup() {
-  // Setup transparent canvas for AR overlay
   let cnv = createCanvas(windowWidth, windowHeight);
   cnv.style('background', 'transparent');
 
@@ -408,7 +423,6 @@ function setup() {
   }
 }
 
-// Initialize video camera feed explicitly
 function initCameraFeed() {
   const videoElement = document.getElementById('cameraVideo');
   if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
@@ -420,10 +434,10 @@ function initCameraFeed() {
       videoElement.srcObject = stream;
     })
     .catch((err) => {
-      console.warn("Environmental camera unavailable, falling back to default user camera:", err);
+      console.warn("Environmental camera unavailable, falling back to front camera:", err);
       navigator.mediaDevices.getUserMedia({ video: true, audio: false })
       .then((stream) => { videoElement.srcObject = stream; })
-      .catch((e) => console.error("Camera access denied or unreadable:", e));
+      .catch((e) => console.error("Camera access denied:", e));
     });
   }
 }
@@ -436,7 +450,7 @@ function calculateButtonPositions() {
 }
 
 function draw() {
-  clear(); // Clear canvas frame to maintain camera background transparency
+  clear(); 
   drawAmbientOverlays();
 
   for (let i = organisms.length - 1; i >= 0; i--) {
