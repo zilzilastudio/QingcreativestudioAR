@@ -63,16 +63,16 @@
     .login-box {
       background: rgba(255, 255, 255, 0.05);
       border: 1px solid rgba(255, 255, 255, 0.1);
-      padding: 30px;
+      padding: clamp(20px, 4vw, 30px);
       border-radius: 16px;
-      max-width: 360px;
+      max-width: min(360px, 85vw);
       width: 100%;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
     }
 
     .login-box h2 {
       margin: 0 0 10px 0;
-      font-size: 22px;
+      font-size: clamp(18px, 4vw, 22px);
       color: #95e1d3;
     }
 
@@ -140,46 +140,16 @@
       cursor: not-allowed;
     }
 
-    #startAudioOverlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(13, 17, 23, 0.85);
-      backdrop-filter: blur(8px);
-      z-index: 9998 !important;
-      display: none;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      color: #ffffff;
-      cursor: pointer;
-    }
-
-    #startAudioOverlay h1 {
-      font-size: 24px;
-      color: #fce38a;
-      margin-bottom: 10px;
-      letter-spacing: 1px;
-    }
-
-    #startAudioOverlay p {
-      font-size: 14px;
-      color: #95e1d3;
-      opacity: 0.8;
-    }
-
     #productPage {
       display: none; 
     }
 
     .copyright {
       position: absolute;
-      bottom: 20px;
-      left: 20px;
+      bottom: max(12px, 2vh);
+      left: max(12px, 3vw);
       color: rgba(255, 255, 255, 0.6);
-      font-size: 12px;
+      font-size: clamp(10px, 1.8vw, 12px);
       pointer-events: none; 
       z-index: 10;
     }
@@ -189,8 +159,8 @@
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      width: 2cm;
-      height: 2cm;
+      width: clamp(1.5cm, 10vw, 2.5cm);
+      height: clamp(1.5cm, 10vw, 2.5cm);
       opacity: 0.15; 
       pointer-events: none;
       z-index: 1;
@@ -215,14 +185,9 @@
         <button type="button" class="toggle-password" onclick="togglePasswordVisibility()" title="Toggle Password Visibility">👁️</button>
       </div>
       
-      <button onclick="checkPassword()" class="submit-btn" id="submitBtn">Unlock Experience</button>
+      <!-- Button now directly unlocks audio gesture -->
+      <button onclick="checkPasswordAndStartAudio()" class="submit-btn" id="submitBtn">Unlock Experience</button>
     </div>
-  </div>
-
-  <!-- Tap to Start Audio Transition -->
-  <div id="startAudioOverlay" onclick="enableAudioAndStart()">
-    <h1>Tap to Start Experience</h1>
-    <p>Tap anywhere on the screen to enable sound</p>
   </div>
 
   <div id="productPage">
@@ -247,29 +212,34 @@ kalimbaAudio.volume = 0.8;
 
 let isMuted = false;
 let isExperienceUnlocked = false;
-let isOriginalBg = false; // Toggle state for original vs camera background
+let isOriginalBg = false; 
 
 // Auto-login on page load if saved in browser memory
 document.addEventListener("DOMContentLoaded", () => {
   const savedAuth = localStorage.getItem("meadow_authenticated");
   if (savedAuth === "true") {
-    unlockExperienceUILayout();
+    // If auto-logging in, unlock audio on first screen interaction
+    const unlockOnGesture = () => {
+      enableAudioAndStart();
+      document.removeEventListener('click', unlockOnGesture);
+      document.removeEventListener('touchstart', unlockOnGesture);
+    };
+    document.addEventListener('click', unlockOnGesture);
+    document.addEventListener('touchstart', unlockOnGesture);
+    
+    unlockExperienceUI();
   }
 });
 
-function unlockExperienceUILayout() {
+function unlockExperienceUI() {
   localStorage.setItem("meadow_authenticated", "true");
+  isExperienceUnlocked = true;
   if (document.getElementById('loginScreen')) document.getElementById('loginScreen').style.display = 'none';
-  if (document.getElementById('startAudioOverlay')) document.getElementById('startAudioOverlay').style.display = 'flex';
+  if (document.getElementById('productPage')) document.getElementById('productPage').style.display = 'block';
 }
 
 function enableAudioAndStart() {
-  isExperienceUnlocked = true;
-
-  if (document.getElementById('startAudioOverlay')) document.getElementById('startAudioOverlay').style.display = 'none';
-  if (document.getElementById('productPage')) document.getElementById('productPage').style.display = 'block';
-
-  if (!isMuted) {
+  if (!isMuted && bgMusic.paused) {
     bgMusic.play().catch(err => console.error("Music playback prevented:", err));
   }
 
@@ -330,7 +300,10 @@ async function generateDeviceFingerprint() {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function checkPassword() {
+async function checkPasswordAndStartAudio() {
+  // Trigger user gesture audio initialization immediately on login tap
+  enableAudioAndStart();
+
   const serialNumber = document.getElementById('serialInput').value.trim();
   if (!serialNumber) return alert("Please input a valid product serial identification code.");
 
@@ -366,7 +339,7 @@ async function checkPassword() {
     const result = await response.json();
 
     if (response.ok && result.allowed) {
-      unlockExperienceUILayout();
+      unlockExperienceUI();
     } else {
       alert(result.error || "Authentication failed. Incorrect passkey assets.");
     }
@@ -379,7 +352,7 @@ async function checkPassword() {
 }
 
 // ==========================================
-// 2. P5.JS VISUALIZER
+// 2. P5.JS VISUALIZER WITH ADAPTIVE RATIOS
 // ==========================================
 const PALETTES = [
   { flower: '#fce38a', stem: '#95e1d3', glow: 'rgba(252, 227, 138, 0.2)' },
@@ -434,19 +407,26 @@ function initCameraFeed() {
 }
 
 function calculateButtonPositions() {
-  btnX = width - 35;
-  btnY = height - 35;
-  resetBtnX = width - 90;
-  resetBtnY = height - 35;
-  bgBtnX = width - 145;
-  bgBtnY = height - 35;
+  let scale = min(width, height);
+  btnRadius = max(18, scale * 0.035);
+  let margin = max(15, scale * 0.04);
+  let spacing = btnRadius * 2.5;
+
+  btnX = width - margin - btnRadius;
+  btnY = height - margin - btnRadius;
+  
+  resetBtnX = btnX - spacing;
+  resetBtnY = btnY;
+  
+  bgBtnX = resetBtnX - spacing;
+  bgBtnY = btnY;
 }
 
 function draw() {
   if (isOriginalBg) {
-    background(13, 17, 23); // Original dark background
+    background(13, 17, 23); 
   } else {
-    clear(); // Transparent background overlaying live camera video
+    clear(); 
   }
 
   drawAmbientOverlays();
@@ -465,11 +445,16 @@ function draw() {
   }
 
   if (isExperienceUnlocked) {
+    let baseDim = min(width, height);
     noStroke();
     fill(255, 255, 255, 140);
     textAlign(CENTER, CENTER);
-    textSize(13);
-    text("Tap screen to plant seeds onto your space", width / 2 - 40, height - 35);
+    textSize(max(11, baseDim * 0.025));
+    
+    // Dynamically position prompt text based on orientation
+    let textX = width > height ? width * 0.4 : width / 2 - (btnRadius * 2);
+    let textY = height - max(15, baseDim * 0.04) - btnRadius;
+    text("Tap screen to plant seeds onto your space", textX, textY);
 
     drawAudioButton();
     drawResetButton();
@@ -490,19 +475,19 @@ function touchStarted() {
 
 function handleInteraction() {
   let dAudio = dist(mouseX, mouseY, btnX, btnY);
-  if (dAudio < btnRadius) {
+  if (dAudio < btnRadius * 1.3) {
     toggleAudio();
     return; 
   }
 
   let dReset = dist(mouseX, mouseY, resetBtnX, resetBtnY);
-  if (dReset < btnRadius) {
+  if (dReset < btnRadius * 1.3) {
     clearMeadow();
     return; 
   }
 
   let dBg = dist(mouseX, mouseY, bgBtnX, bgBtnY);
-  if (dBg < btnRadius) {
+  if (dBg < btnRadius * 1.3) {
     toggleBackground();
     return;
   }
@@ -511,7 +496,7 @@ function handleInteraction() {
     bgMusic.play().catch(() => {});
   }
 
-  if (mouseY < height - 60) {
+  if (mouseY < height - (btnRadius * 3)) {
     organisms.push(new Organism(mouseX, mouseY));
     playKalimbaSound();
   }
@@ -545,29 +530,31 @@ function drawAudioButton() {
   fill(149, 225, 211, isMuted ? 40 : 90);
   ellipse(0, 0, btnRadius * 2, btnRadius * 2);
 
+  let iconScale = btnRadius / 22;
+
   if (!isMuted) {
     fill('#fce38a');
     for (let a = 0; a < TWO_PI; a += HALF_PI) {
       push();
       rotate(a + QUARTER_PI);
-      ellipse(7, 0, 14, 10);
+      ellipse(7 * iconScale, 0, 14 * iconScale, 10 * iconScale);
       pop();
     }
     fill(255, 230);
-    ellipse(0, 0, 5, 5);
+    ellipse(0, 0, 5 * iconScale, 5 * iconScale);
   } else {
     fill('rgba(0,0,0,0.5)');
     stroke('#fce38a');
-    strokeWeight(2);
+    strokeWeight(2 * iconScale);
     beginShape();
-    vertex(0, -8);
-    bezierVertex(6, -2, 5, 6, 0, 8);
-    bezierVertex(-5, 6, -6, -2, 0, -8);
+    vertex(0, -8 * iconScale);
+    bezierVertex(6 * iconScale, -2 * iconScale, 5 * iconScale, 6 * iconScale, 0, 8 * iconScale);
+    bezierVertex(-5 * iconScale, 6 * iconScale, -6 * iconScale, -2 * iconScale, 0, -8 * iconScale);
     endShape(CLOSE);
 
     stroke(255, 100, 100, 230);
-    strokeWeight(2);
-    line(-10, 10, 10, -10);
+    strokeWeight(2 * iconScale);
+    line(-10 * iconScale, 10 * iconScale, 10 * iconScale, -10 * iconScale);
   }
   pop();
 }
@@ -579,19 +566,20 @@ function drawResetButton() {
   fill(149, 225, 211, 80);
   ellipse(0, 0, btnRadius * 2, btnRadius * 2);
 
+  let iconScale = btnRadius / 22;
+
   fill('#95e1d3'); 
   for (let a = 0; a < TWO_PI; a += THIRD_PI) { 
     push();
     rotate(a);
-    ellipse(5, 0, 10, 5); 
+    ellipse(5 * iconScale, 0, 10 * iconScale, 5 * iconScale); 
     pop();
   }
   fill('#fce38a'); 
-  ellipse(0, 0, 4, 4);
+  ellipse(0, 0, 4 * iconScale, 4 * iconScale);
   pop();
 }
 
-// Additional Flower Button for Background Toggle
 function drawBgToggleButton() {
   push();
   translate(bgBtnX, bgBtnY);
@@ -599,16 +587,18 @@ function drawBgToggleButton() {
   fill(252, 227, 138, isOriginalBg ? 90 : 40);
   ellipse(0, 0, btnRadius * 2, btnRadius * 2);
 
+  let iconScale = btnRadius / 22;
+
   fill(isOriginalBg ? '#95e1d3' : '#fce38a'); 
   let petNum = 5;
   for (let i = 0; i < petNum; i++) { 
     push();
     rotate((TWO_PI / petNum) * i);
-    ellipse(6, 0, 10, 6); 
+    ellipse(6 * iconScale, 0, 10 * iconScale, 6 * iconScale); 
     pop();
   }
   fill(255, 255, 255, 220); 
-  ellipse(0, 0, 5, 5);
+  ellipse(0, 0, 5 * iconScale, 5 * iconScale);
   pop();
 }
 
@@ -646,10 +636,14 @@ class Organism {
     this.growSpeed = random(1.5, 3.0);
     this.swayOffset = random(1000);
     this.stemHeight = 0;
-    this.heightRatio = random(0.25, 0.60);
 
+    // Adaptive height ratio: shorter proportional height in landscape mode
+    let isLandscape = width > height;
+    this.heightRatio = isLandscape ? random(0.20, 0.45) : random(0.25, 0.55);
+
+    let baseScale = min(width, height);
     this.flowerScale = 0;
-    this.maxFlowerScale = random(14, 24);
+    this.maxFlowerScale = map(baseScale, 300, 1000, 12, 26, true);
     this.bloomSpeed = 0.03;
     this.pulsePhase = random(100);
     this.palette = random(PALETTES);
@@ -659,8 +653,10 @@ class Organism {
     let t = frameCount * 0.01;
     let wind = sin(t + this.swayOffset) * 0.0005;
     
-    // Unified root baseline line across all screens (height - 40px)
-    let targetAnchorY = height - 40;
+    // Unified bottom root baseline line relative to screen height
+    let baseDim = min(width, height);
+    let bottomMargin = max(15, baseDim * 0.04) + btnRadius;
+    let targetAnchorY = height - bottomMargin;
 
     switch (this.state) {
       case "SEED":
@@ -699,8 +695,9 @@ class Organism {
   display() {
     push();
     let currentAnchorX = this.xPct * width;
-    // Unified root baseline line across all screens
-    let currentAnchorY = height - 40;
+    let baseDim = min(width, height);
+    let bottomMargin = max(15, baseDim * 0.04) + btnRadius;
+    let currentAnchorY = height - bottomMargin;
 
     let maxAllowedStemHeight = currentAnchorY * this.heightRatio;
     let globalSway = sin(frameCount * 0.008 + this.swayOffset) * 12 * (this.stemHeight / maxAllowedStemHeight);
